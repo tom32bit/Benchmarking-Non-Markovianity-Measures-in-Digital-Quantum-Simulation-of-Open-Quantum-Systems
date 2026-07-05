@@ -1,0 +1,133 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-07-04T07:18:06.402712+00:00",
+  "qmembench_version": "0.1.0",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "qiskit": "0.46.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "scales": [
+    0.0,
+    0.5,
+    1.0,
+    2.0
+   ],
+   "shots": 4096,
+   "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ]
+  }
+ },
+ "data": {
+  "rows": [
+   {
+    "noise_scale": 0.0,
+    "true_noisy_N_BLP": 0.46399195394622167,
+    "ci_coverage_z1": 1.0,
+    "raw_mean": 0.43368383458748455,
+    "raw_bias": -0.030308119358737118,
+    "raw_std": 0.0006172560139665498,
+    "debiased_z0.5_mean": 0.39720609598334106,
+    "debiased_z0.5_bias": -0.06678585796288061,
+    "debiased_z0.5_std": 0.004380876333209646,
+    "debiased_z1.0_mean": 0.3819785870019867,
+    "debiased_z1.0_bias": -0.08201336694423494,
+    "debiased_z1.0_std": 0.0014350980150096332,
+    "debiased_z2.0_mean": 0.35446498157958306,
+    "debiased_z2.0_bias": -0.10952697236663861,
+    "debiased_z2.0_std": 0.011465419132301775
+   },
+   {
+    "noise_scale": 0.5,
+    "true_noisy_N_BLP": 0.26570356838715187,
+    "ci_coverage_z1": 0.2,
+    "raw_mean": 0.29343679806677103,
+    "raw_bias": 0.027733229679619165,
+    "raw_std": 0.01841518103937632,
+    "readout_mitigated_mean": 0.29698965279997375,
+    "readout_mitigated_bias": 0.03128608441282188,
+    "readout_mitigated_std": 0.01863814715524711,
+    "debiased_z0.5_mean": 0.25785604599310624,
+    "debiased_z0.5_bias": -0.007847522394045625,
+    "debiased_z0.5_std": 0.021126911012089376,
+    "debiased_z1.0_mean": 0.23923399027933284,
+    "debiased_z1.0_bias": -0.026469578107819025,
+    "debiased_z1.0_std": 0.020643573562522853,
+    "debiased_z2.0_mean": 0.1971350008598341,
+    "debiased_z2.0_bias": -0.06856856752731777,
+    "debiased_z2.0_std": 0.011215389422441302
+   },
+   {
+    "noise_scale": 1.0,
+    "true_noisy_N_BLP": 0.15180194805616148,
+    "ci_coverage_z1": 0.2,
+    "raw_mean": 0.20561894011858825,
+    "raw_bias": 0.053816992062426766,
+    "raw_std": 0.027440472668241355,
+    "readout_mitigated_mean": 0.21150556974528803,
+    "readout_mitigated_bias": 0.059703621689126546,
+    "readout_mitigated_std": 0.028226061288075477,
+    "debiased_z0.5_mean": 0.16636631219434267,
+    "debiased_z0.5_bias": 0.014564364138181185,
+    "debiased_z0.5_std": 0.026713918864643204,
+    "debiased_z1.0_mean": 0.1293226104260628,
+    "debiased_z1.0_bias": -0.022479337630098684,
+    "debiased_z1.0_std": 0.022660533816087264,
+    "debiased_z2.0_mean": 0.09257165613113247,
+    "debiased_z2.0_bias": -0.059230291925029016,
+    "debiased_z2.0_std": 0.020591846365149977
+   },
+   {
+    "noise_scale": 2.0,
+    "true_noisy_N_BLP": 0.07653902260191224,
+    "ci_coverage_z1": 0.0,
+    "raw_mean": 0.15191933069514038,
+    "raw_bias": 0.07538030809322814,
+    "raw_std": 0.015566032304804198,
+    "readout_mitigated_mean": 0.16099911475479808,
+    "readout_mitigated_bias": 0.08446009215288584,
+    "readout_mitigated_std": 0.01649636955251704,
+    "debiased_z0.5_mean": 0.0993203092116596,
+    "debiased_z0.5_bias": 0.02278128660974736,
+    "debiased_z0.5_std": 0.013536633511146338,
+    "debiased_z1.0_mean": 0.07644705316788548,
+    "debiased_z1.0_bias": -9.196943402675628e-05,
+    "debiased_z1.0_std": 0.015885752369201554,
+    "debiased_z2.0_mean": 0.04767286405029136,
+    "debiased_z2.0_bias": -0.028866158551620884,
+    "debiased_z2.0_std": 0.026426604551460068
+   }
+  ],
+  "pair": [
+   "+",
+   "-"
+  ],
+  "shots": 4096,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5
+  ],
+  "z_values": [
+   0.5,
+   1.0,
+   2.0
+  ],
+  "params": {
+   "gamma0": 5.0,
+   "lam": 1.0
+  },
+  "dt": 0.15
+ }
+}

@@ -1,0 +1,155 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-07-04T07:12:30.876592+00:00",
+  "qmembench_version": "0.1.0",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "qiskit": "0.46.3",
+   "qutip": "5.3.0"
+  },
+  "seed": 1234,
+  "params": {
+   "scales": [
+    0.0,
+    0.5,
+    1.0,
+    2.0
+   ],
+   "shots": 4096,
+   "n_boot": 400,
+   "dt": 0.1,
+   "gamma0": 5.0,
+   "lam": 1.0
+  }
+ },
+ "data": {
+  "times": [
+   0.0,
+   0.2,
+   0.4,
+   0.6000000000000001,
+   0.8,
+   1.0,
+   1.2000000000000002,
+   1.4000000000000001,
+   1.6,
+   1.8,
+   2.0,
+   2.2,
+   2.4000000000000004,
+   2.6,
+   2.8000000000000003,
+   3.0,
+   3.2,
+   3.4000000000000004,
+   3.6,
+   3.8000000000000003,
+   4.0,
+   4.2,
+   4.4,
+   4.6000000000000005,
+   4.800000000000001,
+   5.0,
+   5.2,
+   5.4,
+   5.6000000000000005,
+   5.800000000000001,
+   6.0,
+   6.2,
+   6.4,
+   6.6000000000000005,
+   6.800000000000001,
+   7.0,
+   7.2,
+   7.4,
+   7.6000000000000005,
+   7.800000000000001,
+   8.0,
+   8.200000000000001,
+   8.4,
+   8.6,
+   8.8,
+   9.0
+  ],
+  "pair": [
+   "+",
+   "-"
+  ],
+  "shots": 4096,
+  "n_boot": 400,
+  "N_BLP_ideal_reference": 0.4545613135871094,
+  "rows": [
+   {
+    "noise_scale": 0.0,
+    "N_BLP_point": 0.5213993355255779,
+    "N_BLP_debiased": 0.4665889454503052,
+    "N_BLP_ci_low": 0.5039386084883999,
+    "N_BLP_ci_high": 0.6417842070102677,
+    "N_BLP_boot_std": 0.03426495294745018,
+    "null_floor_markovian": 0.02157048377122095,
+    "noise_params": {
+     "scale": 0.0,
+     "p1_effective": 0.0,
+     "p2_effective": 0.0,
+     "p_readout_effective": 0.0,
+     "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout"
+    }
+   },
+   {
+    "noise_scale": 0.5,
+    "N_BLP_point": 0.28858938732271294,
+    "N_BLP_debiased": 0.20727439443717488,
+    "N_BLP_ci_low": 0.2814085584009926,
+    "N_BLP_ci_high": 0.407060298833509,
+    "N_BLP_boot_std": 0.03267736632657347,
+    "null_floor_markovian": 0.05512526995642436,
+    "noise_params": {
+     "scale": 0.5,
+     "p1_effective": 0.00015,
+     "p2_effective": 0.0035,
+     "p_readout_effective": 0.0075,
+     "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout"
+    }
+   },
+   {
+    "noise_scale": 1.0,
+    "N_BLP_point": 0.23094909986802048,
+    "N_BLP_debiased": 0.0904459153599857,
+    "N_BLP_ci_low": 0.23202469641174428,
+    "N_BLP_ci_high": 0.35897783905737113,
+    "N_BLP_boot_std": 0.031937250968164195,
+    "null_floor_markovian": 0.09555368767390543,
+    "noise_params": {
+     "scale": 1.0,
+     "p1_effective": 0.0003,
+     "p2_effective": 0.007,
+     "p_readout_effective": 0.015,
+     "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout"
+    }
+   },
+   {
+    "noise_scale": 2.0,
+    "N_BLP_point": 0.15128428132340163,
+    "N_BLP_debiased": 0.040090766913039956,
+    "N_BLP_ci_low": 0.1678977630948928,
+    "N_BLP_ci_high": 0.2932304696011465,
+    "N_BLP_boot_std": 0.03370868811568074,
+    "null_floor_markovian": 0.094822760857734,
+    "noise_params": {
+     "scale": 2.0,
+     "p1_effective": 0.0006,
+     "p2_effective": 0.014,
+     "p_readout_effective": 0.03,
+     "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout"
+    }
+   }
+  ],
+  "params": {
+   "gamma0": 5.0,
+   "lam": 1.0
+  },
+  "dt": 0.1
+ }
+}

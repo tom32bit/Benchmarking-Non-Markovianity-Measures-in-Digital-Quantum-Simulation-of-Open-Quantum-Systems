@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qmembench"
+version = "0.1.0"
+description = "Signatures of Memory Under Noise: benchmarking non-Markovianity measures in digital quantum simulation of open quantum systems"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "matplotlib>=3.8",
+    "qutip>=5.0",
+    "qiskit>=0.46,<1.0",
+    "qiskit-aer>=0.13",
+]
+
+[tool.setuptools]
+packages = ["qmembench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

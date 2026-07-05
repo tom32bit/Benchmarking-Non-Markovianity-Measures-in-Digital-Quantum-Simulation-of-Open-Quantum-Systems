@@ -1,0 +1,9 @@
+# Signatures of Memory Under Noise - dependency lockfile (floor versions)
+# Tested with Python 3.12 on Windows.
+numpy>=1.26
+scipy>=1.11
+matplotlib>=3.8
+qutip>=5.0          # classical reference solver (mesolve on enlarged pseudomode space)
+qiskit>=0.46,<1.0   # circuit construction (pinned to the installed 0.46 line; code avoids 1.x-only APIs)
+qiskit-aer>=0.13    # density-matrix simulation, NoiseModel, save_density_matrix, reset
+pytest>=8.0

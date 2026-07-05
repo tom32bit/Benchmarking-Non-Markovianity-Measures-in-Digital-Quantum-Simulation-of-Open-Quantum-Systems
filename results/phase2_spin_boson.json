@@ -1,0 +1,126 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-07-04T07:00:49.179342+00:00",
+  "qmembench_version": "0.1.0",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "qiskit": "0.46.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "couplings": [
+    0.05,
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.7
+   ],
+   "dt": 0.05,
+   "n_conv": 6
+  }
+ },
+ "data": {
+  "rows": [
+   {
+    "g": 0.05,
+    "N_BLP_circuit": 5.992709474589297e-05,
+    "N_BLP_ref_nfock2": 5.3339607218316765e-05,
+    "N_BLP_ref_converged": 5.265292536649202e-05,
+    "n_conv": 6,
+    "converged_stability_gap": null,
+    "best_pair": "+i|-i",
+    "max_dev_circuit_vs_ref2": 0.0002892249812472839,
+    "truncation_error_2_vs_converged": 0.000407027700056577
+   },
+   {
+    "g": 0.1,
+    "N_BLP_circuit": 0.0002560036242406083,
+    "N_BLP_ref_nfock2": 0.00023227063404485104,
+    "N_BLP_ref_converged": 0.0002168891668645756,
+    "n_conv": 6,
+    "converged_stability_gap": null,
+    "best_pair": "+i|-i",
+    "max_dev_circuit_vs_ref2": 0.0009849540640863926,
+    "truncation_error_2_vs_converged": 0.005334648631442685
+   },
+   {
+    "g": 0.2,
+    "N_BLP_circuit": 0.003870681779702137,
+    "N_BLP_ref_nfock2": 0.003747920318997122,
+    "N_BLP_ref_converged": 0.0008769525278777834,
+    "n_conv": 6,
+    "converged_stability_gap": null,
+    "best_pair": "0|1",
+    "max_dev_circuit_vs_ref2": 0.002661412508680267,
+    "truncation_error_2_vs_converged": 0.040614646784947736
+   },
+   {
+    "g": 0.3,
+    "N_BLP_circuit": 0.12199370241153273,
+    "N_BLP_ref_nfock2": 0.12123898259752267,
+    "N_BLP_ref_converged": 0.16041836448399618,
+    "n_conv": 6,
+    "converged_stability_gap": null,
+    "best_pair": "0|1",
+    "max_dev_circuit_vs_ref2": 0.004305392878784808,
+    "truncation_error_2_vs_converged": 0.08045903354583028
+   },
+   {
+    "g": 0.4,
+    "N_BLP_circuit": 0.21855841129975395,
+    "N_BLP_ref_nfock2": 0.21193507258815292,
+    "N_BLP_ref_converged": 0.23931249847799935,
+    "n_conv": 6,
+    "converged_stability_gap": null,
+    "best_pair": "+i|-i",
+    "max_dev_circuit_vs_ref2": 0.006371855796339952,
+    "truncation_error_2_vs_converged": 0.12404857264970648
+   },
+   {
+    "g": 0.5,
+    "N_BLP_circuit": 0.23948553297688766,
+    "N_BLP_ref_nfock2": 0.23331811038236716,
+    "N_BLP_ref_converged": 0.17285934358503774,
+    "n_conv": 6,
+    "converged_stability_gap": null,
+    "best_pair": "0|1",
+    "max_dev_circuit_vs_ref2": 0.008097913180666062,
+    "truncation_error_2_vs_converged": 0.16898256489981706
+   },
+   {
+    "g": 0.7,
+    "N_BLP_circuit": 0.3095020869498153,
+    "N_BLP_ref_nfock2": 0.3092535663844847,
+    "N_BLP_ref_converged": 0.11847191512666988,
+    "n_conv": 6,
+    "converged_stability_gap": 0.0021281383778693486,
+    "best_pair": "+|-",
+    "max_dev_circuit_vs_ref2": 0.01027963849145771,
+    "truncation_error_2_vs_converged": 0.1977207256078266
+   }
+  ],
+  "delta": 1.0,
+  "eps": 0.0,
+  "dt": 0.05,
+  "t_max": 10.0,
+  "n_conv": 6,
+  "mode_frequencies_and_kappas": [
+   [
+    1.0,
+    null,
+    0.4
+   ],
+   [
+    1.6,
+    null,
+    0.8
+   ]
+  ],
+  "blp_note": "N_BLP values are canonical-pair LOWER BOUNDS (see phase_blp_pair_certificate; gap up to ~0.09 for spin-boson). The truncation finding rests on the pair-INDEPENDENT trajectory deviation (truncation_error_2_vs_converged), which is rigorous."
+ }
+}

@@ -1,0 +1,97 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-07-04T07:23:38.420570+00:00",
+  "qmembench_version": "0.1.0",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "qiskit": "0.46.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "dt": 0.05,
+   "t_max": 8.0
+  }
+ },
+ "data": {
+  "rows": [
+   {
+    "family": "spin_boson",
+    "param": 0.2,
+    "N_BLP_optimized": 0.0018576554172885507,
+    "N_BLP_canonical": 0.0008769525278767842,
+    "gap": 0.0009807028894117664,
+    "theta": 0.9980699307386725,
+    "phi": 1.5707951624789251
+   },
+   {
+    "family": "spin_boson",
+    "param": 0.4,
+    "N_BLP_optimized": 0.3116686348010134,
+    "N_BLP_canonical": 0.23687696830718144,
+    "gap": 0.07479166649383198,
+    "theta": 2.5100079000664697,
+    "phi": 4.71238794415983
+   },
+   {
+    "family": "spin_boson",
+    "param": 0.6,
+    "N_BLP_optimized": 0.13277084452573112,
+    "N_BLP_canonical": 0.13277084452573085,
+    "gap": 2.7755575615628914e-16,
+    "theta": 2.9802322387695314e-09,
+    "phi": 4.4703483581542975e-09
+   },
+   {
+    "family": "spin_boson",
+    "param": 0.8,
+    "N_BLP_optimized": 0.09891431305087195,
+    "N_BLP_canonical": 0.09766334135169907,
+    "gap": 0.0012509716991728759,
+    "theta": 2.9229687154961566,
+    "phi": 4.71238794415983
+   },
+   {
+    "family": "finite_T",
+    "param": 0.25,
+    "N_BLP_optimized": 0.23286867805115688,
+    "N_BLP_canonical": 0.2328686469844887,
+    "gap": 3.106666818242232e-08,
+    "theta": 1.5710141460087639,
+    "phi": 0.3004962921142579
+   },
+   {
+    "family": "finite_T",
+    "param": 0.5,
+    "N_BLP_optimized": 0.1439457523680084,
+    "N_BLP_canonical": 0.1439457523680084,
+    "gap": 0.0,
+    "theta": 0.0,
+    "phi": 0.0
+   },
+   {
+    "family": "finite_T",
+    "param": 1.0,
+    "N_BLP_optimized": 0.18614007352442324,
+    "N_BLP_canonical": 0.18614007013007977,
+    "gap": 3.3943434729621913e-09,
+    "theta": 6.103515625e-06,
+    "phi": 1.0299682617187502e-05
+   },
+   {
+    "family": "finite_T",
+    "param": 1.5,
+    "N_BLP_optimized": 0.21019686012440275,
+    "N_BLP_canonical": 0.2101968226495293,
+    "gap": 3.74748734544017e-08,
+    "theta": 3.814697265625e-07,
+    "phi": 4.291534423828125e-07
+   }
+  ],
+  "max_abs_gap": 0.07479166649383198,
+  "max_rel_gap": 0.5279250824909221,
+  "canonical_is_tight": false
+ }
+}

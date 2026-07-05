@@ -1,0 +1,42 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-07-04T07:00:31.663269+00:00",
+  "qmembench_version": "0.1.0",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "qiskit": "0.46.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "dts": [
+    0.2,
+    0.1,
+    0.05
+   ],
+   "t_max": 12.0
+  }
+ },
+ "data": {
+  "rows": [
+   {
+    "dt": 0.2,
+    "max_abs_dev": 0.009824017332425328
+   },
+   {
+    "dt": 0.1,
+    "max_abs_dev": 0.0025019970474612907
+   },
+   {
+    "dt": 0.05,
+    "max_abs_dev": 0.0006254383397616969
+   }
+  ],
+  "params": {
+   "gamma0": 5.0,
+   "lam": 1.0
+  }
+ }
+}

@@ -1,0 +1,394 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-07-04T07:29:11.304641+00:00",
+  "qmembench_version": "0.1.0",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "qiskit": "0.46.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "eps": 0.01,
+   "c_var": 3.0,
+   "quick": false
+  }
+ },
+ "data": {
+  "points": [
+   {
+    "family": "temperature",
+    "param": 0.1,
+    "n_max": 0.2839368137361368,
+    "std_at_peak": 0.5188259412036097,
+    "d_req": 3,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 2,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 4,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 4,
+    "d_rule_var": 3,
+    "slack": 0
+   },
+   {
+    "family": "temperature",
+    "param": 0.25,
+    "n_max": 0.3856719092419229,
+    "std_at_peak": 0.6596544528060646,
+    "d_req": 3,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 5,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 4,
+    "d_rule_var": 4,
+    "slack": 1
+   },
+   {
+    "family": "temperature",
+    "param": 0.5,
+    "n_max": 0.5592315924635094,
+    "std_at_peak": 0.8747295671320762,
+    "d_req": 4,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 4,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 6,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 5,
+    "d_rule_var": 5,
+    "slack": 1
+   },
+   {
+    "family": "temperature",
+    "param": 0.75,
+    "n_max": 0.7479083282618963,
+    "std_at_peak": 1.1364789796070975,
+    "d_req": 5,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 4,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 5,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 7,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 5,
+    "d_rule_var": 6,
+    "slack": 1
+   },
+   {
+    "family": "temperature",
+    "param": 1.0,
+    "n_max": 0.9902243836017205,
+    "std_at_peak": 1.3791851856302928,
+    "d_req": 6,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 4,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 6,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 8,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 5,
+    "d_rule_var": 7,
+    "slack": 1
+   },
+   {
+    "family": "temperature",
+    "param": 1.5,
+    "n_max": 1.4391658627982333,
+    "std_at_peak": 1.771428454515782,
+    "d_req": 8,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 5,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 8,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 9,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 6,
+    "d_rule_var": 8,
+    "slack": 0
+   },
+   {
+    "family": "temperature",
+    "param": 2.0,
+    "n_max": 1.8235243310549187,
+    "std_at_peak": 2.050390172908383,
+    "d_req": 8,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 6,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 8,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 10,
+      "censored": true
+     }
+    },
+    "d_rule_mean": 7,
+    "d_rule_var": 9,
+    "slack": 1
+   },
+   {
+    "family": "coupling",
+    "param": 0.2,
+    "n_max": 0.29347181966655866,
+    "std_at_peak": 0.4736211862736077,
+    "d_req": 2,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 2,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 2,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 3,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 4,
+    "d_rule_var": 3,
+    "slack": 1
+   },
+   {
+    "family": "coupling",
+    "param": 0.3,
+    "n_max": 0.45332582831301527,
+    "std_at_peak": 0.5722400626431196,
+    "d_req": 3,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 4,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 4,
+    "d_rule_var": 4,
+    "slack": 1
+   },
+   {
+    "family": "coupling",
+    "param": 0.4,
+    "n_max": 0.6411532691532728,
+    "std_at_peak": 0.6959545980152329,
+    "d_req": 4,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 4,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 4,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 5,
+    "d_rule_var": 4,
+    "slack": 0
+   },
+   {
+    "family": "coupling",
+    "param": 0.5,
+    "n_max": 0.8665102328000809,
+    "std_at_peak": 0.8472489287808758,
+    "d_req": 4,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 4,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 5,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 5,
+    "d_rule_var": 5,
+    "slack": 1
+   },
+   {
+    "family": "coupling",
+    "param": 0.6,
+    "n_max": 1.1380179716624066,
+    "std_at_peak": 1.0250995579072455,
+    "d_req": 4,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 4,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 5,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 6,
+    "d_rule_var": 6,
+    "slack": 2
+   },
+   {
+    "family": "coupling",
+    "param": 0.7,
+    "n_max": 1.4673689687710687,
+    "std_at_peak": 1.2246427572411571,
+    "d_req": 5,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 3,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 5,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 6,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 6,
+    "d_rule_var": 7,
+    "slack": 2
+   },
+   {
+    "family": "coupling",
+    "param": 0.8,
+    "n_max": 1.8667630176510681,
+    "std_at_peak": 1.4243343500008558,
+    "d_req": 5,
+    "censored": false,
+    "d_req_by_eps": {
+     "0.03": {
+      "d_req": 4,
+      "censored": false
+     },
+     "0.01": {
+      "d_req": 5,
+      "censored": false
+     },
+     "0.003": {
+      "d_req": 6,
+      "censored": false
+     }
+    },
+    "d_rule_mean": 7,
+    "d_rule_var": 8,
+    "slack": 3
+   }
+  ],
+  "eps": 0.01,
+  "c_var": 3.0,
+  "eps_list": [
+   0.03,
+   0.01,
+   0.003
+  ],
+  "any_censored": false,
+  "mean_rule_is_safe": false,
+  "variance_rule_is_safe": true,
+  "max_slack": 3,
+  "corr_dreq_vs_nmax": 0.7892627755536233,
+  "corr_dreq_vs_variance_predictor": 0.9375346107211114,
+  "crossval": {
+   "c_from_temperature": 2.75,
+   "c_from_coupling": 2.0,
+   "temp_c_safe_on_coupling": true,
+   "coup_c_safe_on_temperature": false
+  },
+  "dt": 0.05,
+  "t_max": 8.0
+ }
+}

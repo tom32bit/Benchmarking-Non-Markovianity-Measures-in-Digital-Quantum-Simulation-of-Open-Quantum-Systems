@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "Benchmarking Non-Markovianity Measures in Digital Quantum Simulation of Open Quantum Systems"
+abstract: >-
+  A validated, simulator-based framework for quantifying non-Markovian memory in
+  digital quantum simulations of open quantum systems, and for measuring how that
+  quantification is affected by state-space truncation, finite-shot statistics,
+  and device noise. Includes a measure-first validation chain, a regime-dependent
+  truncation-error analysis with a cross-validated Fock-dimension rule, a
+  ground-truth-validated shot-noise bias analysis, a device-noise conflation
+  study, and a resource-fair embedding comparison.
+type: software
+authors:
+  - given-names: "S.M. Yousuf Iqbal"
+    family-names: "Tomal"
+    email: "yousuf.iqbal.tomal@g.bracu.ac.bd"
+    orcid: "https://orcid.org/0009-0000-3391-3824"
+    affiliation: "Department of Computer Science and Engineering, BRAC University, Dhaka, Bangladesh"
+keywords:
+  - open quantum systems
+  - non-Markovian dynamics
+  - digital quantum simulation
+  - pseudomode
+  - information backflow
+  - quantum error mitigation
+license: MIT
+repository-code: "https://github.com/tom32bit/Benchmarking-Non-Markovianity-Measures-in-Digital-Quantum-Simulation-of-Open-Quantum-Systems"

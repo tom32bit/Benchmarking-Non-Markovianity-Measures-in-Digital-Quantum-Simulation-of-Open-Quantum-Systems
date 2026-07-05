@@ -1,0 +1,113 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-07-05T00:05:32.199531+00:00",
+  "qmembench_version": "0.1.0",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "qiskit": "0.46.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "quick": true
+  }
+ },
+ "data": {
+  "trotter": [
+   {
+    "dt": 0.2,
+    "max_dev": 0.009824017332425328
+   },
+   {
+    "dt": 0.1,
+    "max_dev": 0.0025019970474612907
+   },
+   {
+    "dt": 0.05,
+    "max_dev": 0.0006254383397616969
+   },
+   {
+    "dt": 0.025,
+    "max_dev": 0.00015671255952537377
+   }
+  ],
+  "trotter_order_estimate": 1.9910501702503256,
+  "truncation": [
+   {
+    "d": 2,
+    "max_dev": 0.3302419724997181
+   },
+   {
+    "d": 3,
+    "max_dev": 0.12868799868199954
+   },
+   {
+    "d": 4,
+    "max_dev": 0.047390852742060674
+   },
+   {
+    "d": 5,
+    "max_dev": 0.022378004086566206
+   },
+   {
+    "d": 6,
+    "max_dev": 0.01158946586145615
+   },
+   {
+    "d": 7,
+    "max_dev": 0.005903593397092066
+   },
+   {
+    "d": 8,
+    "max_dev": 0.002165184042697721
+   }
+  ],
+  "truncation_log_decay_per_level": -0.8090697413271282,
+  "resources_vs_steps": [
+   {
+    "n_steps": 20,
+    "depth": 441,
+    "cx": 140
+   },
+   {
+    "n_steps": 40,
+    "depth": 881,
+    "cx": 280
+   },
+   {
+    "n_steps": 80,
+    "depth": 1761,
+    "cx": 560
+   },
+   {
+    "n_steps": 160,
+    "depth": 3521,
+    "cx": 1120
+   }
+  ],
+  "depth_loglog_slope_vs_steps": 0.9990584983827617,
+  "cx_loglog_slope_vs_steps": 1.0000000000000002,
+  "resources_vs_modes": [
+   {
+    "n_modes": 1,
+    "n_qubits": 3,
+    "depth": 643,
+    "cx": 200
+   },
+   {
+    "n_modes": 2,
+    "n_qubits": 4,
+    "depth": 967,
+    "cx": 400
+   },
+   {
+    "n_modes": 3,
+    "n_qubits": 5,
+    "depth": 1447,
+    "cx": 600
+   }
+  ]
+ }
+}

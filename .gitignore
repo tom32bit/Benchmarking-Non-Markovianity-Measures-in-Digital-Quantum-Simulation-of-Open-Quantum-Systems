@@ -1,0 +1,32 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# --- Internal working documents (NOT for public/journal release) ---
+# Planning, positioning, adversarial self-review, and writing scaffolds.
+IMPLEMENTATION_PLAN.md
+NOVELTY.md
+PAPER_FOUNDATION.md
+PRE_SUBMISSION_REVIEW.md
+STATISTICS_FRAMING.md
+RESEARCH_ETHICS.md
+Writing guide.md
+
+# --- Provenance history snapshots (the latest results/*.json are the record) ---
+results/history/
+
+# --- Paper source (draft; tracked separately until submission) ---
+paper/
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
