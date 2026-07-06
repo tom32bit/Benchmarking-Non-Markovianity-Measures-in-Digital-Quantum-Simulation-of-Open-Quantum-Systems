@@ -22,6 +22,58 @@ def _load(name: str) -> dict:
         return json.load(fh)
 
 
+def plot_phase9_phase_diagram() -> Path:
+    """Two-panel (coupling, temperature) truncation phase diagram:
+    (a) signed truncation error with the sign-flip contour and region labels;
+    (b) the converged memory landscape in a sequential colormap.
+    """
+    from matplotlib.colors import TwoSlopeNorm
+    d = _load("phase9_truncation_phase_diagram")["data"]
+    g = np.array(d["g"])
+    n_th = np.array(d["n_th"])
+    signed = np.array(d["signed_error"])
+    conv = np.array(d["converged_blp"])
+    n_conv = d["n_conv"]
+    G, T = np.meshgrid(g, n_th)
+
+    fig, axes = plt.subplots(1, 2, figsize=(11.4, 4.5))
+
+    # (a) signed error, diverging, centred at zero. Use the TRUE min/max (not a
+    # symmetric range) so each side fills its half of the colormap: the
+    # destroy-side magnitudes are genuinely smaller (converged memory is itself
+    # small there), and a symmetric scale would wash the blue region out.
+    norm = TwoSlopeNorm(vmin=float(np.nanmin(signed)) - 1e-6, vcenter=0.0,
+                        vmax=float(np.nanmax(signed)))
+    pcm = axes[0].pcolormesh(G, T, signed, cmap="RdBu_r", norm=norm, shading="auto",
+                             rasterized=True)
+    cs = axes[0].contour(G, T, signed, levels=[0.0], colors="k", linewidths=1.6)
+    axes[0].clabel(cs, fmt={0.0: "sign flip"}, fontsize=8, inline=True)
+    cb = fig.colorbar(pcm, ax=axes[0], pad=0.02)
+    cb.set_label(r"$\mathcal{N}_{\mathrm{BLP}}(n{=}2) - \mathcal{N}_{\mathrm{BLP}}$"
+                 f"(conv.)")
+    axes[0].set_xlabel(r"coupling $g$")
+    axes[0].set_ylabel(r"temperature $\bar n$")
+    axes[0].set_title("Signed truncation error")
+    # region labels placed at representative points
+    axes[0].text(0.66, 0.16, "fabricates\n(over)", ha="center", va="center",
+                 fontsize=10.5, color="#5c0d0d", weight="bold")
+    axes[0].text(0.28, 0.82, "destroys\n(under)", ha="center", va="center",
+                 fontsize=10.5, color="white", weight="bold")
+
+    # (b) converged memory landscape, sequential
+    pcm2 = axes[1].pcolormesh(G, T, conv, cmap="inferno", shading="auto",
+                              rasterized=True)
+    cb2 = fig.colorbar(pcm2, ax=axes[1], pad=0.02)
+    cb2.set_label(r"$\mathcal{N}_{\mathrm{BLP}}$ (converged, $n=%d$)" % n_conv)
+    axes[1].set_xlabel(r"coupling $g$")
+    axes[1].set_ylabel(r"temperature $\bar n$")
+    axes[1].set_title("True memory landscape")
+
+    fig.suptitle("Truncation error changes sign across the coupling-temperature plane "
+                 "(finite-$T$ spin-boson)", fontsize=11)
+    return _save(fig, "phase9_truncation_phase_diagram")
+
+
 def _save(fig, name: str) -> Path:
     path = RESULTS_DIR / f"{name}.png"
     fig.tight_layout()
@@ -48,7 +100,7 @@ def plot_phase0() -> Path:
         ax.set_xlabel("time $\\lambda t$")
         ax.legend(fontsize=8)
     axes[0].set_ylabel("trace distance $D(t)$")
-    fig.suptitle("Phase 0: BLP/RHP measures validated on the analytic Stage A solution")
+    fig.suptitle("BLP and RHP measures validated on the analytic Stage A solution")
     return _save(fig, "phase0_measures_validation")
 
 
@@ -65,7 +117,7 @@ def plot_phase1() -> Path:
                 label=f"{tier} ($N_{{BLP}}$ = {d[tier]['N_BLP']:.4f})")
     ax.set_xlabel("time $\\lambda t$")
     ax.set_ylabel(f"trace distance, pair {pair}")
-    ax.set_title("Phase 1: three-tier validation (analytic vs QuTiP vs circuit)\n"
+    ax.set_title("Three-tier validation (analytic vs QuTiP vs circuit)\n"
                  f"max dev circuit vs analytic = {d['max_abs_dev_circuit_vs_analytic']:.2e}, "
                  f"dt = {d['dt']}")
     ax.legend()
@@ -94,7 +146,7 @@ def plot_phase2() -> Path:
     axes[1].set_ylabel("max abs deviation")
     axes[1].set_title("Error decomposition (Trotter vs truncation)")
     axes[1].legend(fontsize=8)
-    fig.suptitle("Phase 2: Stage B spin-boson with structured (2-pseudomode) bath")
+    fig.suptitle("Stage B spin-boson with a structured (2-pseudomode) bath")
     return _save(fig, "phase2_spin_boson")
 
 
@@ -123,7 +175,7 @@ def plot_phase3() -> Path:
     axes[1].set_ylabel("$N_{BLP}$")
     axes[1].set_title("Memory signature vs noise strength")
     axes[1].legend(fontsize=8)
-    fig.suptitle("Phase 3: noise robustness of the simulated memory signature")
+    fig.suptitle("Noise robustness of the simulated memory signature")
     return _save(fig, "phase3_noise_robustness")
 
 
@@ -148,7 +200,7 @@ def plot_phase1T() -> Path:
     axes[1].set_ylabel("max abs deviation")
     axes[1].set_title("Truncation error grows with T\n(circuit stays faithful to its 2-level target)")
     axes[1].legend(fontsize=8)
-    fig.suptitle("Phase 1T: finite temperature -- the truncation centerpiece, second regime")
+    fig.suptitle("Finite temperature: the truncation error at the two-level encoding")
     return _save(fig, "phase1T_finite_temperature")
 
 
@@ -173,7 +225,7 @@ def plot_phase3_bootstrap() -> Path:
                label="ideal reference")
     ax.set_xlabel("noise scale $s$")
     ax.set_ylabel("$N_{BLP}$")
-    ax.set_title(f"Phase 3 statistical rigor: bootstrap CIs, debiasing, null floor\n"
+    ax.set_title(f"Statistical rigor: bootstrap CIs, debiasing, null floor\n"
                  f"(shots={d['shots']}, n_boot={d['n_boot']})")
     ax.legend(fontsize=8)
     return _save(fig, "phase3_bootstrap")
@@ -195,7 +247,7 @@ def plot_phase3_estimator_validation() -> Path:
     ax.set_xlabel("noise scale $s$")
     ax.set_ylabel("estimator bias vs exact noisy $N_{BLP}$")
     cov = ", ".join(f"s{r['noise_scale']}:{r['ci_coverage_z1']:.0%}" for r in rows)
-    ax.set_title(f"Phase 3 estimator validation (M4): bias vs computable ground truth\n"
+    ax.set_title(f"Estimator validation: bias vs computable ground truth\n"
                  f"raw is positively biased; debiasing reduces |bias|. CI coverage: {cov}")
     ax.legend(fontsize=9); ax.grid(alpha=0.3)
     return _save(fig, "phase3_estimator_validation")
@@ -233,7 +285,7 @@ def plot_phase3_noise_models() -> Path:
     axes[1].set_title("Correlated noise preserves memory more than memoryless\n"
                       f"(CIs separate at $\\sigma_{{tot}}\\in$ {seps if seps else 'none'})")
     axes[1].legend(fontsize=8); axes[1].grid(alpha=0.3)
-    fig.suptitle("Phase 3 noise models: Markovian vs realistic vs non-Markovian device noise")
+    fig.suptitle("Device noise: Markovian vs realistic vs non-Markovian")
     return _save(fig, "phase3_noise_models")
 
 
@@ -274,8 +326,8 @@ def plot_phase5_fock_rule() -> Path:
                       f"safe bound: {d['variance_rule_is_safe']})")
     axes[1].legend(fontsize=9); axes[1].grid(alpha=0.3)
 
-    fig.suptitle("Phase 5 (centerpiece): the required Fock dimension is set by the "
-                 "occupied phase-space EXTENT, not the mean occupation")
+    fig.suptitle("The required Fock dimension is set by the occupied phase-space "
+                 "extent, not the mean occupation")
     return _save(fig, "phase5_fock_rule")
 
 
@@ -289,7 +341,7 @@ def plot_phase8_dimer() -> Path:
     ax.plot(t, d["P_R_circuit"], "C3s", ms=3, markevery=6, label="site R (circuit)")
     ax.set_xlabel("time")
     ax.set_ylabel("site excitation population")
-    ax.set_title("Phase 8 (Tier 3): FMO-like excitonic dimer energy transfer\n"
+    ax.set_title("FMO-like excitonic dimer energy transfer\n"
                  f"transfer eff={d['transfer_efficiency']:.2f}, "
                  f"acceptor revival={d['acceptor_population_revival']:.3f}, "
                  f"max dev circuit vs QuTiP={d['max_dev_PR_circuit_vs_qutip']:.2e}")
@@ -326,7 +378,7 @@ def plot_phase7_scaling() -> Path:
     axes[2].set_title(f"Resources scale linearly in steps\n"
                       f"(depth slope {d['depth_loglog_slope_vs_steps']:.2f})")
     axes[2].legend(fontsize=9); axes[2].grid(alpha=0.3)
-    fig.suptitle("Phase 7 (Tier 3): scaling laws -- Trotter O(dt), truncation decay, linear resources")
+    fig.suptitle("Scaling laws: Trotter convergence, truncation decay, linear resources")
     return _save(fig, "phase7_scaling")
 
 
@@ -353,7 +405,7 @@ def plot_phase6_fair_collision() -> Path:
     axes[1].grid(alpha=0.3)
     mreq = d["collision_qubits_to_match"]
     sub = f"collision needs {mreq} qubits to match" if mreq else "collision does not match within tested M"
-    fig.suptitle(f"Phase 6 (fair comparison): ancilla-train vs pseudomode -- {sub}")
+    fig.suptitle(f"Fair comparison: ancilla-train vs pseudomode -- {sub}")
     return _save(fig, "phase6_fair_collision")
 
 
@@ -390,6 +442,6 @@ def plot_phase4() -> Path:
     axes[2].set_ylabel("$N_{BLP}$")
     axes[2].set_title("Noise robustness head-to-head")
     axes[2].legend(fontsize=8)
-    fig.suptitle("Phase 4 [SUPERSEDED by Phase 6]: strawman collision comparison\n"
-                 "(retained only to document the retraction; see phase6_fair_collision)")
+    fig.suptitle("[Superseded] strawman collision comparison\n"
+                 "(retained only to document the retraction; see the fair comparison)")
     return _save(fig, "phase4_embedding_comparison")

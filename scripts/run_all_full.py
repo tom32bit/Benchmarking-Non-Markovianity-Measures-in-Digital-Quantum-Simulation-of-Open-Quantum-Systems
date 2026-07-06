@@ -49,6 +49,7 @@ if __name__ == "__main__":
     p6 = run("phase6 fair collision", lambda: E.phase6_fair_collision(quick=False))
     p7 = run("phase7 scaling", lambda: E.phase7_scaling(quick=False))
     p8 = run("phase8 dimer", lambda: E.phase8_dimer(quick=False))
+    p9 = run("phase9 truncation phase diagram", lambda: E.phase9_truncation_phase_diagram(quick=False))
 
     print("-" * 64)
     print("FIGURES")
@@ -61,6 +62,7 @@ if __name__ == "__main__":
         ("phase4", P.plot_phase4), ("phase5_fock_rule", P.plot_phase5_fock_rule),
         ("phase6_fair_collision", P.plot_phase6_fair_collision),
         ("phase7_scaling", P.plot_phase7_scaling), ("phase8_dimer", P.plot_phase8_dimer),
+        ("phase9_phase_diagram", P.plot_phase9_phase_diagram),
     ]:
         run(f"fig {label}", fn)
 

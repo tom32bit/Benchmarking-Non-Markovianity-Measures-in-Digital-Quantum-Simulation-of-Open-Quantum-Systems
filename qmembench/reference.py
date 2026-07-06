@@ -173,6 +173,48 @@ def spin_boson_qutip_states(rho0_sys: np.ndarray, times: np.ndarray,
     return [np.asarray(s.ptrace(0).full()) for s in sol.states]
 
 
+def spin_boson_qutip_states_finiteT(rho0_sys: np.ndarray, times: np.ndarray,
+                                    delta: float, eps: float,
+                                    modes: list[tuple[float, float, float]],
+                                    n_th: float, n_fock: int = 4) -> list[np.ndarray]:
+    """Finite-temperature spin-boson reference: as spin_boson_qutip_states, but
+    each damped pseudomode relaxes toward a thermal occupation n_th through
+    emission sqrt(kappa(n_th+1)) a and absorption sqrt(kappa n_th) a^dag.
+
+    This single model spans BOTH truncation-error drivers: at low n_th and
+    strong g the sigma_z coupling pumps the mode high (a two-level truncation
+    reflects it -> memory fabricated), while at high n_th the thermal population
+    exceeds what two levels can hold (-> memory destroyed). Sweeping (g, n_th)
+    therefore traces the sign-flip of the truncation error in one plane.
+    Reduces exactly to spin_boson_qutip_states at n_th = 0.
+    """
+    sx, sz = qt.sigmax(), qt.sigmaz()
+    n_modes = len(modes)
+    ident = [qt.qeye(n_fock)] * n_modes
+
+    def emb_sys(op):
+        return qt.tensor(op, *ident)
+
+    def emb_mode(op, k):
+        ops = [qt.qeye(2)] + list(ident)
+        ops[1 + k] = op
+        return qt.tensor(*ops)
+
+    a = qt.destroy(n_fock)
+    H = 0.5 * delta * emb_sys(sx) + 0.5 * eps * emb_sys(sz)
+    c_ops = []
+    for k, (wk, gk, kappak) in enumerate(modes):
+        H += wk * emb_mode(a.dag() * a, k)
+        H += gk * emb_sys(sz) * emb_mode(a + a.dag(), k)
+        c_ops.append(np.sqrt(kappak * (n_th + 1.0)) * emb_mode(a, k))
+        if n_th > 0.0:
+            c_ops.append(np.sqrt(kappak * n_th) * emb_mode(a.dag(), k))
+
+    rho0 = qt.tensor(_sys_qobj(rho0_sys), *[qt.fock_dm(n_fock, 0)] * n_modes)
+    sol = qt.mesolve(H, rho0, np.asarray(times, dtype=float), c_ops=c_ops)
+    return [np.asarray(s.ptrace(0).full()) for s in sol.states]
+
+
 # ---------------------------------------------------------------------------
 # FMO-like excitonic dimer (Tier 3: a physically-motivated model)
 # ---------------------------------------------------------------------------

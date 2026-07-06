@@ -21,7 +21,8 @@ from .measures import (blp_from_curve, blp_measure, blp_measure_optimized,
 from .reference import (analytic_G, analytic_stageA_states, required_fock_dimension,
                         stageA_finiteT_with_occupation, stageA_params,
                         stageA_qutip_states, stageA_qutip_states_finiteT,
-                        spin_boson_qutip_states, spin_boson_with_occupation)
+                        spin_boson_qutip_states, spin_boson_qutip_states_finiteT,
+                        spin_boson_with_occupation)
 from . import circuits as qc_mod
 from . import collision as col_mod
 from .noise import (build_noise_model, from_fake_backend, noise_params_dict,
@@ -83,6 +84,16 @@ def _pair_curves_from_states(states_by_label: dict[str, list[np.ndarray]]) -> di
     for a, b in canonical_pairs():
         curves[f"{a}|{b}"] = trace_distance_curve(states_by_label[a], states_by_label[b])
     return curves
+
+
+def _rhp_from_states(states_by_label: dict[str, list[np.ndarray]]) -> tuple[float, float]:
+    """N_RHP and ill-conditioned fraction from the four informationally complete
+    single-qubit input trajectories (0, 1, +, +i). Used to test whether the
+    truncation sign-flip seen in the BLP measure also appears in RHP."""
+    n = len(states_by_label["0"])
+    transfers = [transfer_matrix({l: states_by_label[l][k] for l in ("0", "1", "+", "+i")})
+                 for k in range(n)]
+    return rhp_measure(transfers)
 
 
 # ===========================================================================
@@ -221,10 +232,15 @@ def phase1_finiteT(quick: bool = False, dt: float = 0.05) -> dict:
                        for l in labels)
         trunc = max(float(np.max(np.abs(np.array(ref2[l]) - np.array(refc[l]))))
                     for l in labels)
+        # RHP for circuit (2-level) and converged, to test the sign-flip in RHP
+        rhp_c2, ill_c2 = _rhp_from_states(circ)
+        rhp_conv, ill_conv = _rhp_from_states(refc)
         rows.append({"n_th": n_th,
                      "N_BLP_circuit": blp_of(circ),
                      "N_BLP_ref_nfock2": blp_of(ref2),
                      "N_BLP_ref_converged": blp_of(refc),
+                     "N_RHP_circuit": rhp_c2, "N_RHP_ref_converged": rhp_conv,
+                     "rhp_ill_frac_circuit": ill_c2, "rhp_ill_frac_converged": ill_conv,
                      "max_dev_circuit_vs_ref2": dev_circ,
                      "truncation_error_2_vs_converged": trunc})
     out = {"rows": rows, "params": pars, "dt": dt, "t_max": t_max, "n_conv": n_conv,
@@ -287,8 +303,12 @@ def phase2(quick: bool = False, n_conv: int = 6) -> dict:
                      for l in labels)
         trunc_err = max(float(np.max(np.abs(np.array(ref2[l]) - np.array(refc[l]))))
                         for l in labels)
+        rhp_c2, ill_c2 = _rhp_from_states(circ)
+        rhp_conv, ill_conv = _rhp_from_states(refc)
         rows.append({"g": g, "N_BLP_circuit": nc, "N_BLP_ref_nfock2": n2,
                      "N_BLP_ref_converged": nconv, "n_conv": n_conv,
+                     "N_RHP_circuit": rhp_c2, "N_RHP_ref_converged": rhp_conv,
+                     "rhp_ill_frac_circuit": ill_c2, "rhp_ill_frac_converged": ill_conv,
                      "converged_stability_gap": conv_gap, "best_pair": best,
                      "max_dev_circuit_vs_ref2": dev_c2,
                      "truncation_error_2_vs_converged": trunc_err})
@@ -299,6 +319,68 @@ def phase2(quick: bool = False, n_conv: int = 6) -> dict:
                         "The truncation finding rests on the pair-INDEPENDENT trajectory "
                         "deviation (truncation_error_2_vs_converged), which is rigorous.")}
     save_result("phase2_spin_boson", {"couplings": couplings, "dt": dt, "n_conv": n_conv}, out)
+    return out
+
+
+# ===========================================================================
+# Phase 9 -- 2D truncation phase diagram over (coupling, temperature)
+# ===========================================================================
+
+def phase9_truncation_phase_diagram(quick: bool = False, n_conv: int = 6) -> dict:
+    """Map the SIGNED two-level truncation error of the BLP measure over the
+    (coupling g, temperature n_th) plane of a finite-temperature spin-boson.
+
+    Signed metric = N_BLP(n_fock=2) - N_BLP(converged) for the (+,-) pair:
+      positive  -> truncation FABRICATES memory (strong coupling, low T),
+      negative  -> truncation DESTROYS memory (high T),
+      the zero contour is the sign-flip boundary.
+    Also returns the converged memory landscape N_BLP(converged) for a second
+    (sequential) panel. All values are canonical (+,-) pair BLP, consistent with
+    Tables I-II; the sign of the difference is the physical content.
+    """
+    delta, eps = 1.0, 0.0
+    modes_proto = [(1.0, None, 0.4), (1.6, None, 0.8)]
+    dt = 0.1
+    t_max = 8.0
+    n_steps = int(round(t_max / dt))
+    times = np.linspace(0.0, n_steps * dt, n_steps + 1)
+    pair = ("+", "-")
+
+    if quick:
+        gs = np.linspace(0.05, 0.8, 14)
+        n_ths = np.linspace(0.0, 1.5, 12)
+    else:
+        gs = np.linspace(0.05, 0.8, 44)
+        n_ths = np.linspace(0.0, 1.5, 34)
+
+    def blp_pair(states):
+        return blp_from_curve(trace_distance_curve(states[pair[0]], states[pair[1]]))
+
+    signed = np.zeros((len(n_ths), len(gs)))
+    converged = np.zeros((len(n_ths), len(gs)))
+    trunc2 = np.zeros((len(n_ths), len(gs)))
+    for i, n_th in enumerate(n_ths):
+        for j, g in enumerate(gs):
+            modes = [(w, g, kap) for (w, _, kap) in modes_proto]
+            s2 = {l: spin_boson_qutip_states_finiteT(dm(l), times, delta, eps, modes,
+                                                     n_th=n_th, n_fock=2) for l in pair}
+            sc = {l: spin_boson_qutip_states_finiteT(dm(l), times, delta, eps, modes,
+                                                     n_th=n_th, n_fock=n_conv) for l in pair}
+            b2, bc = blp_pair(s2), blp_pair(sc)
+            trunc2[i, j] = b2
+            converged[i, j] = bc
+            signed[i, j] = b2 - bc
+
+    out = {"g": gs, "n_th": n_ths, "signed_error": signed,
+           "converged_blp": converged, "circuit_blp": trunc2,
+           "delta": delta, "eps": eps, "dt": dt, "t_max": t_max, "n_conv": n_conv,
+           "pair": pair, "mode_frequencies_and_kappas": modes_proto,
+           "note": ("Signed = N_BLP(n_fock=2) - N_BLP(n_fock=%d), (+,-) pair. "
+                    "Positive fabricates, negative destroys; zero contour is the "
+                    "sign-flip boundary. Finite-T spin-boson (single model spanning "
+                    "both regimes)." % n_conv)}
+    save_result("phase9_truncation_phase_diagram",
+                {"grid": [len(gs), len(n_ths)], "dt": dt, "n_conv": n_conv}, out)
     return out
 
 
@@ -595,20 +677,85 @@ def phase3_noise_models(quick: bool = False, seed: int = 1234) -> dict:
     return results
 
 
-def phase3_estimator_validation(quick: bool = False, shots: int = 4096,
-                                seeds=(1, 2, 3, 4, 5)) -> dict:
+def phase3_conflation_dt_check(quick: bool = False, seed: int = 1234) -> dict:
+    """M3: the quasi-static dephasing is applied stroboscopically (O(dt)), so the
+    small-sigma conflation gap could be a discretization artifact. We measure the
+    correlated-minus-memoryless gap at sigma_tot = 0.3 (and 0.6) on two grids,
+    dt = 0.1 and dt = 0.05, and check the gap is grid-stable and its CIs still
+    separate. If the gap is not stable at sigma_tot = 0.3, the conflation claim
+    is restricted to sigma_tot >= 0.6.
+    """
+    pars = STAGEA_NONMARKOV
+    omega, kappa = stageA_params(**pars)
+    t_max = 9.0
+    n_ens = 30 if quick else 60
+    sigmas = [0.3, 0.6]
+    dts = [0.1, 0.05]
+    rows = []
+    for dtv in dts:
+        n_steps = int(round(t_max / dtv))
+        save_every = max(1, int(round(0.2 / dtv)))  # ~same physical time resolution
+        for st in sigmas:
+            Phi = quasistatic_angles(st, n_ens, seed=seed)
+            rng = np.random.default_rng(seed + 1)
+            per_step = rng.normal(0.0, st / np.sqrt(n_steps), size=(n_ens, n_steps))
+            nm_mem, _ = _ensemble_member_states(("+", "-"), n_steps, dtv, omega, kappa,
+                                                lambda m, Phi=Phi: [Phi[m] / n_steps] * n_steps,
+                                                n_ens, save_every)
+            mk_mem, _ = _ensemble_member_states(("+", "-"), n_steps, dtv, omega, kappa,
+                                                lambda m, ps=per_step: ps[m], n_ens, save_every)
+            nm = _ensemble_blp_with_ci(nm_mem, ("+", "-"), seed=seed)
+            mk = _ensemble_blp_with_ci(mk_mem, ("+", "-"), seed=seed)
+            sep = nm["ci_low"] > mk["ci_high"] or mk["ci_low"] > nm["ci_high"]
+            rows.append({"dt": dtv, "sigma_tot": st, "gap": nm["N_BLP"] - mk["N_BLP"],
+                         "nm": nm["N_BLP"], "mk": mk["N_BLP"], "cis_separated": sep,
+                         "nm_ci": [nm["ci_low"], nm["ci_high"]],
+                         "mk_ci": [mk["ci_low"], mk["ci_high"]]})
+    # grid stability: gap(dt=0.1) vs gap(dt=0.05) at each sigma
+    stability = {}
+    for st in sigmas:
+        g10 = next(r["gap"] for r in rows if r["dt"] == 0.1 and r["sigma_tot"] == st)
+        g05 = next(r["gap"] for r in rows if r["dt"] == 0.05 and r["sigma_tot"] == st)
+        stability[str(st)] = {"gap_dt0.1": g10, "gap_dt0.05": g05,
+                              "abs_change": abs(g10 - g05)}
+    out = {"rows": rows, "grid_stability": stability, "n_ensemble": n_ens,
+           "t_max": t_max, "params": pars}
+    save_result("phase3_conflation_dt_check", {"sigmas": sigmas, "dts": dts,
+                                               "n_ensemble": n_ens}, out, seed=seed)
+    return out
+
+
+def _wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score interval for a binomial proportion k/n (M1)."""
+    if n == 0:
+        return (0.0, 1.0)
+    p = k / n
+    denom = 1.0 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = (z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / denom
+    return (max(0.0, centre - half), min(1.0, centre + half))
+
+
+def phase3_estimator_validation(quick: bool = False, shots: int = 4096, seeds=None,
+                                dt: float = 0.15,
+                                save_name: str = "phase3_estimator_validation") -> dict:
     """M4: validate the shot-based estimators against a COMPUTABLE ground truth.
 
     The density-matrix simulator gives the exact noisy reduced states, hence
-    the true noisy N_BLP at each noise scale. We then measure the bias of the
-    raw / debiased / readout-mitigated estimators against it, over multiple
-    seeds (bias = mean estimate - truth), sweep the debias threshold z, and
-    check bootstrap-CI coverage of the truth.
+    the true noisy N_BLP at each noise scale. We measure the bias of the raw /
+    debiased / readout-mitigated estimators against it over many seeds, sweep
+    the debias threshold z, and check bootstrap-CI coverage of the truth with a
+    Wilson interval on the coverage proportion itself (M1). The ``dt`` and
+    ``save_name`` arguments allow a second, coarser grid for the grid-robustness
+    check of the debiased estimator (M2b).
     """
     from .statistics import bootstrap_blp, rho_from_triplet
+    if seeds is None:
+        seeds = range(1, 6) if quick else range(1, 51)   # 50 seeds at full res
+    seeds = list(seeds)
     pars = STAGEA_NONMARKOV
     omega, kappa = stageA_params(**pars)
-    dt, t_max = 0.15, 9.0
+    t_max = 9.0
     stride = 3 if quick else 2
     step_list = list(range(0, int(round(t_max / dt)) + 1, stride))
     pair = ("+", "-")
@@ -655,18 +802,23 @@ def phase3_estimator_validation(quick: bool = False, shots: int = 4096,
                 est[f"debiased_z{z}"].append(b["N_BLP_debiased"])
                 if z == 1.0 and b["N_BLP_ci_low"] <= true_blp <= b["N_BLP_ci_high"]:
                     covered += 1
+        cov_lo, cov_hi = _wilson_ci(covered, len(seeds))
         row = {"noise_scale": s, "true_noisy_N_BLP": true_blp,
-               "ci_coverage_z1": covered / len(seeds)}
+               "ci_coverage_z1": covered / len(seeds),
+               "ci_coverage_wilson95": [cov_lo, cov_hi], "n_seeds": len(seeds)}
         for k, vals in est.items():
             if vals:
                 row[f"{k}_mean"] = float(np.mean(vals))
                 row[f"{k}_bias"] = float(np.mean(vals) - true_blp)
                 row[f"{k}_std"] = float(np.std(vals))
+                # standard error of the mean bias, so bias is reported with an
+                # uncertainty rather than as a point number
+                row[f"{k}_bias_sem"] = float(np.std(vals) / np.sqrt(len(vals)))
         rows.append(row)
     out = {"rows": rows, "pair": pair, "shots": shots, "seeds": list(seeds),
-           "z_values": z_values, "params": pars, "dt": dt}
-    save_result("phase3_estimator_validation",
-                {"scales": scales, "shots": shots, "seeds": list(seeds)}, out)
+           "z_values": z_values, "params": pars, "dt": dt, "n_seeds": len(seeds)}
+    save_result(save_name, {"scales": scales, "shots": shots,
+                            "n_seeds": len(seeds), "dt": dt}, out)
     return out
 
 
