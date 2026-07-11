@@ -1,6 +1,6 @@
 {
  "provenance": {
-  "timestamp_utc": "2026-07-04T07:29:11.304641+00:00",
+  "timestamp_utc": "2026-07-10T13:59:28.087874+00:00",
   "qmembench_version": "0.1.0",
   "python": "3.12.6",
   "platform": "Windows-11-10.0.26200-SP0",
@@ -376,6 +376,56 @@
    0.01,
    0.003
   ],
+  "c_sweep": {
+   "2": {
+    "temperature": {
+     "safe": false,
+     "max_over_provision": 0,
+     "min_slack": -2,
+     "n_under_provisioned": 3,
+     "n_points": 7
+    },
+    "coupling": {
+     "safe": true,
+     "max_over_provision": 1,
+     "min_slack": 0,
+     "n_under_provisioned": 0,
+     "n_points": 7
+    }
+   },
+   "2.75": {
+    "temperature": {
+     "safe": true,
+     "max_over_provision": 1,
+     "min_slack": 0,
+     "n_under_provisioned": 0,
+     "n_points": 7
+    },
+    "coupling": {
+     "safe": true,
+     "max_over_provision": 2,
+     "min_slack": 0,
+     "n_under_provisioned": 0,
+     "n_points": 7
+    }
+   },
+   "3": {
+    "temperature": {
+     "safe": true,
+     "max_over_provision": 1,
+     "min_slack": 0,
+     "n_under_provisioned": 0,
+     "n_points": 7
+    },
+    "coupling": {
+     "safe": true,
+     "max_over_provision": 3,
+     "min_slack": 0,
+     "n_under_provisioned": 0,
+     "n_points": 7
+    }
+   }
+  },
   "any_censored": false,
   "mean_rule_is_safe": false,
   "variance_rule_is_safe": true,

@@ -77,7 +77,7 @@ def plot_phase9_phase_diagram() -> Path:
 def _save(fig, name: str) -> Path:
     path = RESULTS_DIR / f"{name}.png"
     fig.tight_layout()
-    fig.savefig(path, dpi=150)
+    fig.savefig(path, dpi=300)
     plt.close(fig)
     return path
 
@@ -295,13 +295,15 @@ def plot_phase5_fock_rule() -> Path:
     pts = d["points"]
     c = d["c_var"]
     markers = {"temperature": ("o", "C3"), "coupling": ("s", "C0")}
+    labels = {"temperature": "temperature family (super-Poissonian)",
+              "coupling": "coupling family (near-Poissonian)"}
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
 
     # (left) mean-only predictor: the two families SEPARATE
     for fam, (mk, col) in markers.items():
         xs = [p["n_max"] for p in pts if p["family"] == fam]
         ys = [p["d_req"] for p in pts if p["family"] == fam]
-        axes[0].scatter(xs, ys, marker=mk, color=col, s=70, zorder=3, label=fam)
+        axes[0].scatter(xs, ys, marker=mk, color=col, s=70, zorder=3, label=labels[fam])
     ng = np.linspace(0, max(p["n_max"] for p in pts) * 1.1, 100)
     axes[0].plot(ng, np.ceil(ng + 2 * np.sqrt(ng + 1)) + 1, "k--", lw=1.2,
                  label="mean-only rule")
@@ -316,7 +318,7 @@ def plot_phase5_fock_rule() -> Path:
     for fam, (mk, col) in markers.items():
         xs = [p["n_max"] + c * p["std_at_peak"] for p in pts if p["family"] == fam]
         ys = [p["d_req"] for p in pts if p["family"] == fam]
-        axes[1].scatter(xs, ys, marker=mk, color=col, s=70, zorder=3, label=fam)
+        axes[1].scatter(xs, ys, marker=mk, color=col, s=70, zorder=3, label=labels[fam])
     xg = np.linspace(0, max(p["n_max"] + c * p["std_at_peak"] for p in pts) * 1.1, 100)
     axes[1].plot(xg, np.ceil(xg) + 1, "k--", lw=1.2, label=r"rule $\lceil P\rceil+1$")
     axes[1].set_xlabel(rf"variance-aware predictor $\langle n\rangle_{{max}} + {c:g}\,\sigma_n$")

@@ -980,8 +980,24 @@ def phase5_fock_rule(quick: bool = False, eps: float = 1e-2, c_var: float = 3.0)
     xval_coup_on_temp = all(fock_rule_variance_aware(p["n_max"], p["std_at_peak"],
                             c_from_coup) >= p["d_req"] for p in temp_pts)
 
+    # R3.1: explicit over/under-provisioning of the variance rule across a small
+    # sweep of the constant c, per family, so the "safe c" claim is auditable.
+    # d_rule(c) - d_req >= 0 everywhere == safe; the max is the worst over-spend.
+    def provisioning(cal_pts, c):
+        slacks = [fock_rule_variance_aware(p["n_max"], p["std_at_peak"], c) - p["d_req"]
+                  for p in cal_pts]
+        return {"safe": bool(all(s >= 0 for s in slacks)),
+                "max_over_provision": int(max(slacks)),
+                "min_slack": int(min(slacks)),
+                "n_under_provisioned": int(sum(1 for s in slacks if s < 0)),
+                "n_points": len(slacks)}
+    c_sweep = {f"{c:g}": {"temperature": provisioning(temp_pts, c),
+                          "coupling": provisioning(coup_pts, c)}
+               for c in (2.0, 2.75, 3.0)}
+
     predictor = np.array([p["n_max"] + c_var * p["std_at_peak"] for p in points])
     out = {"points": points, "eps": eps, "c_var": c_var, "eps_list": eps_list,
+           "c_sweep": c_sweep,
            "any_censored": any(p["censored"] for p in points),
            "mean_rule_is_safe": all(p["d_rule_mean"] >= p["d_req"] for p in points),
            "variance_rule_is_safe": all(p["d_rule_var"] >= p["d_req"] for p in points),
