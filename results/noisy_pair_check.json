@@ -1,0 +1,147 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-09-24T22:22:58.579809+00:00",
+  "qmembench_version": "0.1.0",
+  "git_commit": "da05f5ddc1fb9e4d68e5df5ccb82db7d7af3b218",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "scipy": "1.15.2",
+   "qiskit": "0.46.3",
+   "qiskit_aer": "0.13.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "scales": [
+    0.0,
+    0.5,
+    1.0,
+    2.0
+   ],
+   "trotter_dt": 0.15,
+   "stride": 2,
+   "t_max": 9.0
+  }
+ },
+ "data": {
+  "rows": [
+   {
+    "noise_scale": 0.0,
+    "noise_params": {
+     "scale": 0.0,
+     "p1_effective": 0.0,
+     "p2_effective": 0.0,
+     "p_readout_effective": 0.0,
+     "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout"
+    },
+    "N_BLP_plus_minus": 0.4639919539462216,
+    "N_BLP_canonical": 0.4639919539462216,
+    "best_canonical_pair": "+|-",
+    "canonical_by_pair": {
+     "0|1": 0.13807899372984975,
+     "+|-": 0.4639919539462216,
+     "+i|-i": 0.46399195394622145
+    },
+    "N_BLP_optimized": 0.46399195394622184,
+    "gap": 2.220446049250313e-16,
+    "n_opt": [
+     0.9999999782137547,
+     0.00020874024557748522,
+     7.991190437321092e-09
+    ],
+    "budget_change": 0.0,
+    "recorded_true_noisy_N_BLP": 0.46399195394622167
+   },
+   {
+    "noise_scale": 0.5,
+    "noise_params": {
+     "scale": 0.5,
+     "p1_effective": 0.00015,
+     "p2_effective": 0.0035,
+     "p_readout_effective": 0.0075,
+     "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout"
+    },
+    "N_BLP_plus_minus": 0.26570356847460413,
+    "N_BLP_canonical": 0.2675704690909324,
+    "best_canonical_pair": "+i|-i",
+    "canonical_by_pair": {
+     "0|1": 0.0888046452981705,
+     "+|-": 0.26570356847460413,
+     "+i|-i": 0.2675704690909324
+    },
+    "N_BLP_optimized": 0.26757046910235555,
+    "gap": 1.1423140211519467e-11,
+    "n_opt": [
+     -3.153706457513223e-08,
+     -0.9999999999518326,
+     9.81497446051239e-06
+    ],
+    "budget_change": 0.0,
+    "recorded_true_noisy_N_BLP": 0.26570356838715187
+   },
+   {
+    "noise_scale": 1.0,
+    "noise_params": {
+     "scale": 1.0,
+     "p1_effective": 0.0003,
+     "p2_effective": 0.007,
+     "p_readout_effective": 0.015,
+     "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout"
+    },
+    "N_BLP_plus_minus": 0.15180194828464727,
+    "N_BLP_canonical": 0.1536153905505683,
+    "best_canonical_pair": "+i|-i",
+    "canonical_by_pair": {
+     "0|1": 0.05478881840261952,
+     "+|-": 0.15180194828464727,
+     "+i|-i": 0.1536153905505683
+    },
+    "N_BLP_optimized": 0.1536153905848127,
+    "gap": 3.4244385105353103e-11,
+    "n_opt": [
+     -1.82001377860604e-07,
+     -0.9999999997434184,
+     2.265237679112155e-05
+    ],
+    "budget_change": 0.0,
+    "recorded_true_noisy_N_BLP": 0.15180194805616148
+   },
+   {
+    "noise_scale": 2.0,
+    "noise_params": {
+     "scale": 2.0,
+     "p1_effective": 0.0006,
+     "p2_effective": 0.014,
+     "p_readout_effective": 0.03,
+     "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout"
+    },
+    "N_BLP_plus_minus": 0.07653902274125855,
+    "N_BLP_canonical": 0.07653902274125855,
+    "best_canonical_pair": "+|-",
+    "canonical_by_pair": {
+     "0|1": 0.018168823055525585,
+     "+|-": 0.07653902274125855,
+     "+i|-i": 0.0763767593304769
+    },
+    "N_BLP_optimized": 0.07653902274713043,
+    "gap": 5.871872432727798e-12,
+    "n_opt": [
+     -0.9999999999197593,
+     -7.648786962255882e-07,
+     1.2645015197866672e-05
+    ],
+    "budget_change": 0.0,
+    "recorded_true_noisy_N_BLP": 0.07653902260191224
+   }
+  ],
+  "params": {
+   "gamma0": 5.0,
+   "lam": 1.0
+  },
+  "trotter_dt": 0.15,
+  "blp_sampling_interval": 0.3,
+  "t_max": 9.0
+ }
+}
