@@ -15,9 +15,10 @@ from pathlib import Path
 import numpy as np
 
 from . import __version__
-from .measures import (blp_from_curve, blp_measure, blp_measure_optimized,
-                       canonical_pairs, dm, rhp_measure, trace_distance_curve,
-                       transfer_matrix)
+from .measures import (IC_INPUTS, blp_direction_values, blp_from_curve, blp_measure,
+                       blp_measure_optimized, blp_optimize_pair, canonical_pairs, dm,
+                       pauli_images_from_states, rhp_measure, trace_distance_curve,
+                       trace_norm, transfer_matrix)
 from .reference import (analytic_G, analytic_stageA_states, required_fock_dimension,
                         stageA_finiteT_with_occupation, stageA_params,
                         stageA_qutip_states, stageA_qutip_states_finiteT,
@@ -38,15 +39,34 @@ STAGEA_NONMARKOV = {"gamma0": 5.0, "lam": 1.0}   # gamma0 > lam/2 -> backflow
 STAGEA_MARKOV = {"gamma0": 0.2, "lam": 1.0}      # gamma0 < lam/2 -> no backflow
 
 
+def _git_commit() -> str | None:
+    """Commit of the code that produced a record; '+dirty' marks uncommitted
+    changes to tracked files. None if git is unavailable."""
+    import subprocess
+    root = Path(__file__).resolve().parents[1]
+    try:
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, check=True,
+                             capture_output=True, text=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
+                               cwd=root, check=True, capture_output=True, text=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return sha + ("+dirty" if dirty else "")
+
+
 def _provenance(params: dict, seed: int | None) -> dict:
     import qiskit
+    import qiskit_aer
     import qutip
+    import scipy
     return {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "qmembench_version": __version__,
+        "git_commit": _git_commit(),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
-        "versions": {"numpy": np.__version__, "qiskit": qiskit.__version__,
+        "versions": {"numpy": np.__version__, "scipy": scipy.__version__,
+                     "qiskit": qiskit.__version__, "qiskit_aer": qiskit_aer.__version__,
                      "qutip": qutip.__version__},
         "seed": seed,
         "params": params,
@@ -1048,6 +1068,249 @@ def phase_blp_pair_certificate(quick: bool = False) -> dict:
     out = {"rows": rows, "max_abs_gap": max_gap, "max_rel_gap": rel,
            "canonical_is_tight": max_gap < 0.02}
     save_result("phase_blp_pair_certificate", {"dt": dt, "t_max": t_max}, out)
+    return out
+
+
+# ===========================================================================
+# Pair-optimised BLP and Fock-dimension convergence at the reported points
+# ===========================================================================
+
+_PAIR_KEYS = ("N_BLP_canonical", "best_canonical_pair", "canonical_by_pair",
+              "N_BLP_optimized", "gap", "n_opt", "budget_change")
+
+
+def _ic_states(evolver, times) -> dict[str, np.ndarray]:
+    """Trajectories of the four IC inputs under ``evolver(rho0, times)``."""
+    return {l: np.asarray(evolver(dm(l), times)) for l in IC_INPUTS}
+
+
+def _six_from_ic(states) -> dict[str, np.ndarray]:
+    """All six canonical-state trajectories from the four IC ones, by linearity:
+    rho_- = rho_0 + rho_1 - rho_+ and rho_-i = rho_0 + rho_1 - rho_+i."""
+    o0, o1 = np.asarray(states["0"]), np.asarray(states["1"])
+    op, oi = np.asarray(states["+"]), np.asarray(states["+i"])
+    return {"0": o0, "1": o1, "+": op, "-": o0 + o1 - op, "+i": oi, "-i": o0 + o1 - oi}
+
+
+def _max_trace_norm_dev(a, b) -> float:
+    """max over the six canonical inputs and all times of ||rho_a - rho_b||_1."""
+    sa, sb = _six_from_ic(a), _six_from_ic(b)
+    return max(trace_norm(x - y) for l in sa for x, y in zip(sa[l], sb[l]))
+
+
+def _max_abs_dev(a, b) -> float:
+    """Element-wise max deviation over the six canonical inputs (the metric of
+    the paper's tables)."""
+    sa, sb = _six_from_ic(a), _six_from_ic(b)
+    return max(float(np.max(np.abs(sa[l] - sb[l]))) for l in sa)
+
+
+def _pair_summary(states) -> tuple[dict, np.ndarray]:
+    """Canonical and pair-optimised BLP of a channel, and its Pauli images."""
+    images = pauli_images_from_states(states)
+    res = blp_optimize_pair(images)
+    return {k: res[k] for k in _PAIR_KEYS}, images
+
+
+def _recorded_table_values(family: str) -> dict:
+    """Canonical BLP values recorded for Table 1 (finite_T) or Table 2
+    (spin_boson), keyed by parameter, so a rerun can show that it reproduces
+    them. Empty if the record is absent."""
+    name, key = {"finite_T": ("phase1T_finite_temperature", "n_th"),
+                 "spin_boson": ("phase2_spin_boson", "g")}[family]
+    path = RESULTS_DIR / f"{name}.json"
+    if not path.exists():
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        rows = json.load(fh)["data"]["rows"]
+    return {float(r[key]): {"circuit": r["N_BLP_circuit"], "d2": r["N_BLP_ref_nfock2"],
+                            "d6": r["N_BLP_ref_converged"]} for r in rows}
+
+
+def tables_pair_and_fock_convergence(family: str, d_max: int = 10,
+                                     quick: bool = False) -> dict:
+    """Pair-optimised BLP and Fock-dimension convergence at the points of
+    Table 1 (``family="finite_T"``) or Table 2 (``family="spin_boson"``).
+
+    Same models, Trotter step (0.05), BLP sampling and window (t_max = 10) as
+    the recorded Table runs. For each point: the circuit, and the QuTiP
+    reference at every Fock dimension d = 2..d_max, each with its canonical and
+    pair-optimised BLP. Convergence in d is reported for the measure,
+    eps_NM(d) = |N(d) - N(d_max)|, and for the states,
+    max_t ||rho^(d+1)(t) - rho^(d)(t)||_1 over the six canonical inputs. The
+    circuit/reference comparison is also evaluated with each side's optimal
+    pair applied to the other (the pair sensitivity of their ratio).
+    """
+    dt, t_max = 0.05, 10.0
+    n_steps = int(round(t_max / dt))
+    times = np.linspace(0.0, n_steps * dt, n_steps + 1)
+    if family == "finite_T":
+        pars = STAGEA_NONMARKOV
+        omega, kappa = stageA_params(**pars)
+        params = [0.0, 0.25, 1.0] if quick else [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5]
+        config = {"model": "Stage A at finite temperature, pseudomode starting in its "
+                           "ground state", **pars, "n_th": params}
+
+        def reference(p, d):
+            return _ic_states(lambda r0, t: stageA_qutip_states_finiteT(
+                r0, t, **pars, n_th=p, n_fock=d), times)
+
+        def circuits(p):
+            return [qc_mod.stageA_exact_circuit(l, n_steps, dt, omega, kappa, n_th=p)
+                    for l in IC_INPUTS]
+    elif family == "spin_boson":
+        delta, eps = 1.0, 0.0
+        proto = [(1.0, 0.4), (1.6, 0.8)]            # (w_k, kappa_k), as in phase2
+        params = [0.1, 0.4, 0.7] if quick else [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7]
+        config = {"model": "Stage B spin-boson at T = 0", "delta": delta, "eps": eps,
+                  "modes_w_kappa": proto, "g": params}
+
+        def reference(p, d):
+            modes = [(w, p, k) for w, k in proto]
+            return _ic_states(lambda r0, t: spin_boson_qutip_states(
+                r0, t, delta, eps, modes, n_fock=d), times)
+
+        def circuits(p):
+            modes = [(w, p, k) for w, k in proto]
+            return [qc_mod.stageB_exact_circuit(l, n_steps, dt, delta, eps, modes)
+                    for l in IC_INPUTS]
+    else:
+        raise ValueError(f"unknown family {family!r}")
+
+    recorded = _recorded_table_values(family)
+    dims = list(range(2, d_max + 1))
+    rows = []
+    for p in params:
+        res = qc_mod.run_exact(circuits(p))
+        circ = {l: np.asarray(qc_mod.exact_states_from_labels(r, n_steps))
+                for l, r in zip(IC_INPUTS, res)}
+        circ_sum, circ_images = _pair_summary(circ)
+        refs, sums, images = {}, {}, {}
+        for d in dims:
+            refs[d] = reference(p, d)
+            sums[d], images[d] = _pair_summary(refs[d])
+        top = sums[d_max]
+        per_d = []
+        for d in dims:
+            entry = {"d": d, **sums[d],
+                     "eps_NM_canonical": abs(sums[d]["N_BLP_canonical"] - top["N_BLP_canonical"]),
+                     "eps_NM_optimized": abs(sums[d]["N_BLP_optimized"] - top["N_BLP_optimized"]),
+                     "max_abs_dev_to_dmax": _max_abs_dev(refs[d], refs[d_max])}
+            if d < d_max:
+                entry["max_trace_norm_dev_to_next_d"] = _max_trace_norm_dev(refs[d], refs[d + 1])
+            per_d.append(entry)
+        n_circ, n_ref = np.array(circ_sum["n_opt"]), np.array(top["n_opt"])
+        row = {"param": p, "circuit": circ_sum,
+               "cross_pairs": {
+                   "circuit_at_reference_pair": float(
+                       blp_direction_values(circ_images, n_ref[None, :])[0]),
+                   "reference_at_circuit_pair": float(
+                       blp_direction_values(images[d_max], n_circ[None, :])[0])},
+               "circuit_vs_d2_max_abs_dev": _max_abs_dev(circ, refs[2]),
+               "per_d": per_d}
+        rec = recorded.get(float(p))
+        if rec is not None:
+            row["recorded_canonical"] = rec
+            row["reproduction_diff"] = {
+                "circuit": circ_sum["N_BLP_canonical"] - rec["circuit"],
+                "d2": sums[2]["N_BLP_canonical"] - rec["d2"],
+                "d6": (sums[6]["N_BLP_canonical"] - rec["d6"]) if 6 in sums else None}
+        rows.append(row)
+    out = {"family": family, "rows": rows, "dims": dims, "d_max": d_max,
+           "config": config, "trotter_dt": dt, "blp_sampling_interval": dt,
+           "t_max": t_max,
+           "pairs": ("canonical = best of the three canonical pairs; optimized = "
+                     "blp_optimize_pair over all antipodal pure-state pairs")}
+    save_result(f"pair_fock_convergence_{family}",
+                {"family": family, "d_max": d_max, "quick": quick, "params": params,
+                 "trotter_dt": dt, "t_max": t_max}, out)
+    return out
+
+
+def phase_diagram_pair_and_fock_check(points=None, d_max: int = 10) -> dict:
+    """Pair optimisation and Fock convergence at selected points of the Fig. 4
+    phase diagram (finite-T spin-boson; BLP sampled every 0.1 up to t_max = 8,
+    as in the figure). The figure uses the (+,-) pair and d = 6; the signed
+    error n=2 minus reference is given for the (+,-) pair at d = 6 and at
+    d_max, and for the optimised pair at d_max. QuTiP only: the figure has no
+    circuit data."""
+    delta, eps = 1.0, 0.0
+    proto = [(1.0, 0.4), (1.6, 0.8)]
+    dt, t_max = 0.1, 8.0
+    n_steps = int(round(t_max / dt))
+    times = np.linspace(0.0, n_steps * dt, n_steps + 1)
+    if points is None:
+        # the four corners of the plotted plane, then points inside each region
+        points = [(0.05, 0.0), (0.05, 1.5), (0.8, 0.0), (0.8, 1.5),
+                  (0.3, 0.0), (0.4, 0.0), (0.3, 1.0), (0.5, 0.5)]
+    dims = list(range(2, d_max + 1))
+    rows = []
+    for g, n_th in points:
+        modes = [(w, g, k) for w, k in proto]
+        refs, sums = {}, {}
+        for d in dims:
+            refs[d] = _ic_states(lambda r0, t: spin_boson_qutip_states_finiteT(
+                r0, t, delta, eps, modes, n_th=n_th, n_fock=d), times)
+            sums[d] = _pair_summary(refs[d])[0]
+        top = sums[d_max]
+        pm = {d: sums[d]["canonical_by_pair"]["+|-"] for d in dims}
+        per_d = []
+        for d in dims:
+            entry = {"d": d, **sums[d], "plus_minus": pm[d],
+                     "eps_NM_plus_minus": abs(pm[d] - pm[d_max]),
+                     "eps_NM_optimized": abs(sums[d]["N_BLP_optimized"] - top["N_BLP_optimized"])}
+            if d < d_max:
+                entry["max_trace_norm_dev_to_next_d"] = _max_trace_norm_dev(refs[d], refs[d + 1])
+            per_d.append(entry)
+        rows.append({"g": g, "n_th": n_th, "per_d": per_d,
+                     "signed_error_plus_minus_d6": (pm[2] - pm[6]) if 6 in pm else None,
+                     "signed_error_plus_minus_dmax": pm[2] - pm[d_max],
+                     "signed_error_optimized_dmax": sums[2]["N_BLP_optimized"] - top["N_BLP_optimized"]})
+    out = {"rows": rows, "dims": dims, "d_max": d_max, "points": points,
+           "model": "finite-T spin-boson, pseudomodes starting in their ground state",
+           "delta": delta, "eps": eps, "modes_w_kappa": proto,
+           "blp_sampling_interval": dt, "t_max": t_max}
+    save_result("phase_diagram_pair_fock_check",
+                {"points": points, "d_max": d_max, "blp_sampling_interval": dt,
+                 "t_max": t_max}, out)
+    return out
+
+
+def noisy_pair_check(scales=(0.0, 0.5, 1.0, 2.0), dt: float = 0.15) -> dict:
+    """Is the (+,-) pair used in Sections 5-6 still BLP-optimal under the device
+    noise? Exact noisy channels (density-matrix simulation, no shots) of the
+    Stage A circuit on the Table 3 grid: Trotter step 0.15, BLP sampled every
+    2 steps, t_max = 9. The (+,-) value is Table 3's 'true N_BLP'."""
+    pars = STAGEA_NONMARKOV
+    omega, kappa = stageA_params(**pars)
+    t_max, stride = 9.0, 2
+    step_list = list(range(0, int(round(t_max / dt)) + 1, stride))
+    recorded = {}
+    path = RESULTS_DIR / "phase3_estimator_validation.json"
+    if path.exists():
+        with open(path, encoding="utf-8") as fh:
+            recorded = {float(r["noise_scale"]): r["true_noisy_N_BLP"]
+                        for r in json.load(fh)["data"]["rows"]}
+    rows = []
+    for s in scales:
+        nm = build_noise_model(scale=s)
+        res = qc_mod.run_exact([qc_mod.stageA_exact_circuit(l, step_list[-1], dt, omega, kappa,
+                                                            save_every=1) for l in IC_INPUTS],
+                               noise_model=nm)
+        states = {}
+        for l, r in zip(IC_INPUTS, res):
+            full = qc_mod.exact_states_from_labels(r, step_list[-1])
+            states[l] = np.asarray([full[k] for k in step_list])
+        summary, _ = _pair_summary(states)
+        row = {"noise_scale": s, "noise_params": noise_params_dict(s),
+               "N_BLP_plus_minus": summary["canonical_by_pair"]["+|-"], **summary}
+        if float(s) in recorded:
+            row["recorded_true_noisy_N_BLP"] = recorded[float(s)]
+        rows.append(row)
+    out = {"rows": rows, "params": pars, "trotter_dt": dt,
+           "blp_sampling_interval": dt * stride, "t_max": t_max}
+    save_result("noisy_pair_check", {"scales": list(scales), "trotter_dt": dt,
+                                     "stride": stride, "t_max": t_max}, out)
     return out
 
 
