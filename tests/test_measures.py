@@ -3,8 +3,13 @@ import numpy as np
 import pytest
 
 from qmembench.measures import (blp_from_curve, choi_from_transfer, dm,
-                                rhp_measure, trace_distance, trace_norm,
-                                transfer_matrix)
+                                rhp_diagnostics, rhp_measure, trace_distance,
+                                trace_norm, transfer_matrix)
+
+
+def _dephase(r):
+    """Transfer matrix of a map that multiplies the coherences by r."""
+    return np.diag([1.0, r, r, 1.0]).astype(complex)
 
 
 def test_trace_distance_known_values():
@@ -53,3 +58,23 @@ def test_rhp_detects_ncp_intermediate_map():
     # coherence 1 -> 0.5 -> 0.8: the second step is NCP
     n_rhp, _ = rhp_measure([dephase(1.0), dephase(0.5), dephase(0.8)])
     assert n_rhp > 0.1
+
+
+def test_rhp_diagnostics_agree_with_rhp_measure():
+    transfers = [_dephase(1.0), _dephase(0.5), _dephase(0.8), _dephase(0.3)]
+    diag = rhp_diagnostics(transfers)
+    n_rhp, ill_frac = rhp_measure(transfers)
+    assert np.sum(diag["g"]) == pytest.approx(n_rhp)
+    assert np.mean(diag["ill_conditioned"]) == pytest.approx(ill_frac)
+
+
+def test_rhp_condition_number_and_trace_preservation():
+    """kappa belongs to the map being inverted (T_k); tr C = 1 for TP steps."""
+    diag = rhp_diagnostics([_dephase(1.0), _dephase(0.01), _dephase(0.02)])
+    assert diag["kappa"][0] == pytest.approx(1.0)
+    assert diag["kappa"][1] == pytest.approx(100.0)
+    np.testing.assert_allclose(diag["choi_trace"], 1.0, atol=1e-12)
+    assert not diag["ill_conditioned"].any()
+    # a map below the cutoff is flagged at the step that inverts it
+    flagged = rhp_diagnostics([_dephase(1.0), _dephase(1e-8), _dephase(1e-8)], rcond=1e-6)
+    assert list(flagged["ill_conditioned"]) == [False, True]

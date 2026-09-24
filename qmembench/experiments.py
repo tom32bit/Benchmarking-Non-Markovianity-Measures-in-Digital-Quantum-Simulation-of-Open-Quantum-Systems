@@ -1032,14 +1032,14 @@ def phase_blp_pair_certificate(quick: bool = False) -> dict:
     for g in ([0.3, 0.6] if quick else [0.2, 0.4, 0.6, 0.8]):
         modes = [(1.0, g, 0.4), (1.6, g, 0.8)]
         ch = lambda r0, modes=modes: spin_boson_qutip_states(r0, times, 1.0, 0.0, modes, n_fock=6)
-        cert = blp_measure_optimized(ch, seed=1)
+        cert = blp_measure_optimized(ch)
         rows.append({"family": "spin_boson", "param": g, **cert})
 
     # finite-T Stage A at a few temperatures
     for n_th in ([0.5, 1.0] if quick else [0.25, 0.5, 1.0, 1.5]):
         ch = lambda r0, n_th=n_th: stageA_qutip_states_finiteT(r0, times, **STAGEA_NONMARKOV,
                                                                n_th=n_th, n_fock=6)
-        cert = blp_measure_optimized(ch, seed=1)
+        cert = blp_measure_optimized(ch)
         rows.append({"family": "finite_T", "param": n_th, **cert})
 
     max_gap = max(r["gap"] for r in rows)
