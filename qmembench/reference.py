@@ -73,6 +73,31 @@ def analytic_stageA_states(rho0: np.ndarray, times: np.ndarray,
     return out
 
 
+def analytic_blp_continuum(t_max: float, gamma0: float, lam: float) -> float:
+    """Continuum BLP of the Stage A optimal pair over [0, t_max], D(t) = |G(t)|.
+
+    For gamma0 > lam/2, with delta = sqrt(2 gamma0 lam - lam^2), |G| rises from
+    its zero at t = 2 (k pi - arctan(delta / lam)) / delta to its maximum at
+    t = 2 pi k / delta, where |G| = exp(-pi k lam / delta) (k = 1, 2, ...). The
+    BLP is the sum of these rises, the last one cut at t_max; as t_max -> inf
+    it tends to 1 / (exp(pi lam / delta) - 1). Zero for gamma0 <= lam / 2,
+    where |G| decays monotonically.
+    """
+    if gamma0 <= lam / 2.0:
+        return 0.0
+    delta = np.sqrt(2.0 * gamma0 * lam - lam ** 2)
+    total, k = 0.0, 1
+    while True:
+        t_zero = 2.0 * (k * np.pi - np.arctan(delta / lam)) / delta
+        if t_zero >= t_max:
+            return total
+        t_peak = 2.0 * np.pi * k / delta
+        if t_peak > t_max:
+            return total + abs(float(analytic_G([t_max], gamma0, lam)[0]))
+        total += float(np.exp(-np.pi * k * lam / delta))
+        k += 1
+
+
 def stageA_params(gamma0: float, lam: float) -> tuple[float, float]:
     """Pseudomode (Omega, kappa) equivalent to the Lorentzian (gamma0, lam)."""
     return np.sqrt(gamma0 * lam / 2.0), 2.0 * lam
