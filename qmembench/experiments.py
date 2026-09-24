@@ -1314,6 +1314,78 @@ def noisy_pair_check(scales=(0.0, 0.5, 1.0, 2.0), dt: float = 0.15) -> dict:
     return out
 
 
+def _phase9_point(args) -> dict:
+    """One (g, n_th) point of the pair-optimised phase diagram: canonical (+,-)
+    and optimised BLP at each Fock dimension in ``dims`` (a process-pool worker)."""
+    g, n_th, dims, times, delta, eps, proto = args
+    modes = [(w, g, k) for w, k in proto]
+    out = {}
+    for d in dims:
+        states = _ic_states(lambda r0, t: spin_boson_qutip_states_finiteT(
+            r0, t, delta, eps, modes, n_th=n_th, n_fock=d), times)
+        s, _ = _pair_summary(states)
+        out[d] = {"plus_minus": s["canonical_by_pair"]["+|-"],
+                  "optimized": s["N_BLP_optimized"], "n_opt": s["n_opt"],
+                  "budget_change": s["budget_change"]}
+    return out
+
+
+def phase9_truncation_phase_diagram_optimized(quick: bool = False, d_ref: int = 10,
+                                              d_check: int = 9, n_workers: int = 1,
+                                              grid: tuple[int, int] | None = None) -> dict:
+    """The Fig. 4 phase diagram recomputed with pair-optimised BLP.
+
+    Signed truncation error N(n_fock=2) - N(d_ref) over the (coupling,
+    temperature) plane of the finite-T spin-boson, on the figure's plane,
+    window and sampling (t_max = 8, every 0.1), for the optimised pair and for
+    the (+,-) pair the figure used. The reference is checked against d_check
+    at every point (reference_check_max_abs). ``grid`` = (n_g, n_th) overrides
+    the default 44 x 34 (14 x 12 when quick); ``n_workers`` > 1 spreads the
+    points over a process pool.
+    """
+    delta, eps = 1.0, 0.0
+    proto = [(1.0, 0.4), (1.6, 0.8)]
+    dt, t_max = 0.1, 8.0
+    n_steps = int(round(t_max / dt))
+    times = np.linspace(0.0, n_steps * dt, n_steps + 1)
+    n_g, n_n = grid if grid is not None else ((14, 12) if quick else (44, 34))
+    gs = np.linspace(0.05, 0.8, n_g)
+    n_ths = np.linspace(0.0, 1.5, n_n)
+    dims = sorted({2, d_check, d_ref})
+    tasks = [(float(g), float(n), dims, times, delta, eps, proto) for n in n_ths for g in gs]
+    if n_workers > 1:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(max_workers=n_workers) as pool:
+            results = list(pool.map(_phase9_point, tasks, chunksize=2))
+    else:
+        results = [_phase9_point(t) for t in tasks]
+    shape = (len(n_ths), len(gs))
+
+    def field(d, key):
+        return np.array([r[d][key] for r in results]).reshape(shape)
+
+    ref_check = np.maximum(np.abs(field(d_check, "optimized") - field(d_ref, "optimized")),
+                           np.abs(field(d_check, "plus_minus") - field(d_ref, "plus_minus")))
+    out = {"g": gs, "n_th": n_ths, "d_ref": d_ref, "d_check": d_check,
+           "signed_error_optimized": field(2, "optimized") - field(d_ref, "optimized"),
+           "signed_error_plus_minus": field(2, "plus_minus") - field(d_ref, "plus_minus"),
+           "reference_optimized": field(d_ref, "optimized"),
+           "reference_plus_minus": field(d_ref, "plus_minus"),
+           "nfock2_optimized": field(2, "optimized"),
+           "nfock2_plus_minus": field(2, "plus_minus"),
+           "n_opt_reference": np.array([r[d_ref]["n_opt"] for r in results]).reshape(shape + (3,)),
+           "n_opt_nfock2": np.array([r[2]["n_opt"] for r in results]).reshape(shape + (3,)),
+           "reference_check_max_abs": ref_check,
+           "max_budget_change": max(r[d]["budget_change"] for r in results for d in dims),
+           "model": "finite-T spin-boson, pseudomodes starting in their ground state",
+           "delta": delta, "eps": eps, "modes_w_kappa": proto,
+           "blp_sampling_interval": dt, "t_max": t_max}
+    save_result("phase9_truncation_phase_diagram_optimized",
+                {"grid": [n_g, n_n], "d_ref": d_ref, "d_check": d_check,
+                 "blp_sampling_interval": dt, "t_max": t_max}, out)
+    return out
+
+
 # ===========================================================================
 # Phase 8 (Tier 3) -- FMO-like excitonic dimer (generalisation demo)
 # ===========================================================================
