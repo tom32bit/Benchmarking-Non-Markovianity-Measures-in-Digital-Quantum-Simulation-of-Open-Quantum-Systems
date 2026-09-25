@@ -1041,6 +1041,60 @@ def phase5_fock_rule(quick: bool = False, eps: float = 1e-2, c_var: float = 3.0)
 
 
 # ===========================================================================
+# Noise-model parameters and their device equivalents (T2.12)
+# ===========================================================================
+
+def noise_model_mapping(scales=(0.5, 1.0, 2.0),
+                        backends=("FakeManilaV2", "FakeKolkataV2", "FakeWashingtonV2",
+                                  "FakeSherbrooke")) -> dict:
+    """The model's per-gate parameters at each scale and their average gate
+    errors, computed from the Aer error objects themselves; the median
+    calibration values of Qiskit's device snapshots; and the scale at which
+    each of the model's rates equals each snapshot's median."""
+    from qiskit.providers import fake_provider as fp
+    from qiskit.quantum_info import average_gate_fidelity
+    from qiskit_aer.noise import depolarizing_error
+    from .noise import DEFAULT_P1, DEFAULT_P2, DEFAULT_PRO
+    model = []
+    for sc in scales:
+        prm = noise_params_dict(sc)
+        e1 = 1.0 - average_gate_fidelity(depolarizing_error(prm["p1_effective"], 1).to_quantumchannel())
+        e2 = 1.0 - average_gate_fidelity(depolarizing_error(prm["p2_effective"], 2).to_quantumchannel())
+        model.append({**prm, "avg_error_1q": float(e1), "avg_error_2q": float(e2),
+                      "readout_error": prm["p_readout_effective"]})
+    unit = next(m for m in model if m["scale"] == 1.0)
+    devices = []
+    for name in backends:
+        b = getattr(fp, name)()
+        t = b.target
+        two = next(g for g in ("cx", "ecr", "cz") if g in t)
+
+        def median(gate, attr="error"):
+            vals = [getattr(v, attr) for v in t[gate].values() if v is not None and getattr(v, attr) is not None]
+            return float(np.median(vals)) if vals else None
+        props = [b.qubit_properties(q) for q in range(b.num_qubits)]
+        entry = {"backend": name, "n_qubits": b.num_qubits, "two_qubit_gate": two,
+                 "median_error_sx": median("sx"), "median_error_2q": median(two),
+                 "median_readout_error": median("measure"),
+                 "median_duration_sx_s": median("sx", "duration"),
+                 "median_duration_2q_s": median(two, "duration"),
+                 "median_T1_s": float(np.median([q.t1 for q in props if q.t1])),
+                 "median_T2_s": float(np.median([q.t2 for q in props if q.t2]))}
+        entry["equivalent_scale"] = {
+            "1q": entry["median_error_sx"] / unit["avg_error_1q"],
+            "2q": entry["median_error_2q"] / unit["avg_error_2q"],
+            "readout": entry["median_readout_error"] / unit["readout_error"]}
+        devices.append(entry)
+    out = {"model": model, "devices": devices,
+           "defaults": {"p1": DEFAULT_P1, "p2": DEFAULT_P2, "p_readout": DEFAULT_PRO},
+           "note": ("Average gate error = 1 - average gate fidelity of the Aer error object. "
+                    "Device values are the medians of Qiskit's calibration snapshots "
+                    "(qiskit.providers.fake_provider, Qiskit 0.46), over qubits or qubit pairs.")}
+    save_result("noise_model_mapping", {"scales": list(scales), "backends": list(backends)}, out)
+    return out
+
+
+# ===========================================================================
 # Finite-T circuit error budget against its matched truncation (T2.6)
 # ===========================================================================
 
