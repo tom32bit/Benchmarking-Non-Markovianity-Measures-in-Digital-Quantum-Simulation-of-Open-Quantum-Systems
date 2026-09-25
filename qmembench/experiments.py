@@ -19,8 +19,8 @@ from .measures import (IC_INPUTS, blp_direction_values, blp_from_curve, blp_meas
                        blp_measure_optimized, blp_optimize_pair, canonical_pairs, dm,
                        pauli_images_from_states, rhp_measure, trace_distance_curve,
                        trace_norm, transfer_matrix)
-from .reference import (analytic_G, analytic_blp_continuum, analytic_stageA_states,
-                        required_fock_dimension,
+from .reference import (TIGHT_SOLVER_OPTIONS, analytic_G, analytic_blp_continuum,
+                        analytic_stageA_states, required_fock_dimension,
                         stageA_finiteT_with_occupation, stageA_params,
                         stageA_qutip_states, stageA_qutip_states_finiteT,
                         spin_boson_qutip_states, spin_boson_qutip_states_finiteT,
@@ -55,6 +55,11 @@ def _git_commit() -> str | None:
     return sha + ("+dirty" if dirty else "")
 
 
+# A run executes the code imported at its launch, and a long run can outlive a
+# commit: records keep the commit at import as well as the one at save time.
+_GIT_COMMIT_AT_IMPORT = _git_commit()
+
+
 def _provenance(params: dict, seed: int | None) -> dict:
     import qiskit
     import qiskit_aer
@@ -64,6 +69,7 @@ def _provenance(params: dict, seed: int | None) -> dict:
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "qmembench_version": __version__,
         "git_commit": _git_commit(),
+        "git_commit_at_import": _GIT_COMMIT_AT_IMPORT,
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "versions": {"numpy": np.__version__, "scipy": scipy.__version__,
@@ -1323,7 +1329,7 @@ def _phase9_point(args) -> dict:
     out = {}
     for d in dims:
         states = _ic_states(lambda r0, t: spin_boson_qutip_states_finiteT(
-            r0, t, delta, eps, modes, n_th=n_th, n_fock=d), times)
+            r0, t, delta, eps, modes, n_th=n_th, n_fock=d, options=TIGHT_SOLVER_OPTIONS), times)
         s, _ = _pair_summary(states)
         out[d] = {"plus_minus": s["canonical_by_pair"]["+|-"],
                   "optimized": s["N_BLP_optimized"], "n_opt": s["n_opt"],
@@ -1333,7 +1339,8 @@ def _phase9_point(args) -> dict:
 
 def phase9_truncation_phase_diagram_optimized(quick: bool = False, d_ref: int = 10,
                                               d_check: int = 9, n_workers: int = 1,
-                                              grid: tuple[int, int] | None = None) -> dict:
+                                              grid: tuple[int, int] | None = None,
+                                              sampling: float = 0.1) -> dict:
     """The Fig. 4 phase diagram recomputed with pair-optimised BLP.
 
     Signed truncation error N(n_fock=2) - N(d_ref) over the (coupling,
@@ -1342,11 +1349,12 @@ def phase9_truncation_phase_diagram_optimized(quick: bool = False, d_ref: int = 
     the (+,-) pair the figure used. The reference is checked against d_check
     at every point (reference_check_max_abs). ``grid`` = (n_g, n_th) overrides
     the default 44 x 34 (14 x 12 when quick); ``n_workers`` > 1 spreads the
-    points over a process pool.
+    points over a process pool; ``sampling`` is the BLP grid (0.1 in the
+    figure). Solves use TIGHT_SOLVER_OPTIONS.
     """
     delta, eps = 1.0, 0.0
     proto = [(1.0, 0.4), (1.6, 0.8)]
-    dt, t_max = 0.1, 8.0
+    dt, t_max = sampling, 8.0
     n_steps = int(round(t_max / dt))
     times = np.linspace(0.0, n_steps * dt, n_steps + 1)
     n_g, n_n = grid if grid is not None else ((14, 12) if quick else (44, 34))
@@ -1383,7 +1391,8 @@ def phase9_truncation_phase_diagram_optimized(quick: bool = False, d_ref: int = 
            "blp_sampling_interval": dt, "t_max": t_max}
     save_result("phase9_truncation_phase_diagram_optimized",
                 {"grid": [n_g, n_n], "d_ref": d_ref, "d_check": d_check,
-                 "blp_sampling_interval": dt, "t_max": t_max}, out)
+                 "blp_sampling_interval": dt, "t_max": t_max,
+                 "solver_options": TIGHT_SOLVER_OPTIONS}, out)
     return out
 
 
@@ -1425,16 +1434,18 @@ def stageA_blp_time_convergence(t_maxes=(10.0, 12.0),
 
 
 def tables_blp_time_convergence(family: str, d_ref: int,
-                                samplings=(0.05, 0.025, 0.0125, 0.00625),
+                                samplings=(0.05, 0.025, 0.0125, 0.00625, 0.003125),
                                 trotter_dts=(0.05, 0.025, 0.0125), quick: bool = False) -> dict:
     """Convergence of the Table 1 (finite_T) or Table 2 (spin_boson) BLP values
     in time resolution.
 
-    Reference (QuTiP at Fock dimension d_ref): solved once at the finest
-    sampling and subsampled, so only the sampling changes. Circuit: rerun at
-    each Trotter step and sampled at every multiple of it in ``samplings``, so
-    Trotter and sampling effects can be told apart. Canonical, (+,-) and
-    pair-optimised values throughout; window t_max = 10 as in the tables.
+    Reference (QuTiP at Fock dimension d_ref) and matched truncation (QuTiP at
+    n_fock = 2, the circuit's model without Trotter error): each solved once at
+    the finest sampling and subsampled, so only the sampling changes. Circuit:
+    rerun at each Trotter step and sampled at every multiple of it in
+    ``samplings``, so Trotter and sampling effects can be told apart.
+    Canonical, (+,-) and pair-optimised values throughout; window t_max = 10
+    as in the tables.
     """
     t_max = 10.0
     fine = min(samplings)
@@ -1445,9 +1456,9 @@ def tables_blp_time_convergence(family: str, d_ref: int,
         omega, kappa = stageA_params(**pars)
         params = [0.25, 1.0] if quick else [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5]
 
-        def reference(p):
+        def reference(p, d):
             return _ic_states(lambda r0, t: stageA_qutip_states_finiteT(
-                r0, t, **pars, n_th=p, n_fock=d_ref), times)
+                r0, t, **pars, n_th=p, n_fock=d, options=TIGHT_SOLVER_OPTIONS), times)
 
         def circuits(p, dt, n):
             return [qc_mod.stageA_exact_circuit(l, n, dt, omega, kappa, n_th=p)
@@ -1457,10 +1468,10 @@ def tables_blp_time_convergence(family: str, d_ref: int,
         proto = [(1.0, 0.4), (1.6, 0.8)]
         params = [0.4, 0.7] if quick else [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7]
 
-        def reference(p):
+        def reference(p, d):
             modes = [(w, p, k) for w, k in proto]
             return _ic_states(lambda r0, t: spin_boson_qutip_states(
-                r0, t, delta, eps, modes, n_fock=d_ref), times)
+                r0, t, delta, eps, modes, n_fock=d, options=TIGHT_SOLVER_OPTIONS), times)
 
         def circuits(p, dt, n):
             modes = [(w, p, k) for w, k in proto]
@@ -1471,10 +1482,12 @@ def tables_blp_time_convergence(family: str, d_ref: int,
 
     rows = []
     for p in params:
-        ref = reference(p)
+        ref, matched = reference(p, d_ref), reference(p, 2)
         row = {"param": p,
                "reference": {f"{s:g}": _sampled_summary(ref, int(round(s / fine)))
                              for s in samplings},
+               "nfock2": {f"{s:g}": _sampled_summary(matched, int(round(s / fine)))
+                          for s in samplings},
                "circuit": {}}
         for dt in trotter_dts:
             n = int(round(t_max / dt))
@@ -1488,12 +1501,13 @@ def tables_blp_time_convergence(family: str, d_ref: int,
            "trotter_dts": list(trotter_dts), "rows": rows}
     save_result(f"blp_time_convergence_{family}",
                 {"family": family, "d_ref": d_ref, "samplings": list(samplings),
-                 "trotter_dts": list(trotter_dts), "quick": quick}, out)
+                 "trotter_dts": list(trotter_dts), "quick": quick,
+                 "solver_options": TIGHT_SOLVER_OPTIONS}, out)
     return out
 
 
 def phase_diagram_blp_time_convergence(points=None, d_ref: int = 10,
-                                       samplings=(0.1, 0.05, 0.025, 0.0125)) -> dict:
+                                       samplings=(0.1, 0.05, 0.025, 0.0125, 0.00625)) -> dict:
     """Time-resolution convergence of the Fig. 4 signed truncation error at
     selected points: QuTiP at n_fock = 2 and d_ref, one fine solve per point,
     subsampled; (+,-) and pair-optimised values; window t_max = 8."""
@@ -1512,7 +1526,8 @@ def phase_diagram_blp_time_convergence(points=None, d_ref: int = 10,
         vals = {}
         for d in (2, d_ref):
             states = _ic_states(lambda r0, t: spin_boson_qutip_states_finiteT(
-                r0, t, delta, eps, modes, n_th=n_th, n_fock=d), times)
+                r0, t, delta, eps, modes, n_th=n_th, n_fock=d,
+                options=TIGHT_SOLVER_OPTIONS), times)
             vals[d] = {f"{s:g}": _sampled_summary(states, int(round(s / fine)))
                        for s in samplings}
         signed = {k: {key: vals[2][k][key] - vals[d_ref][k][key]
@@ -1522,7 +1537,8 @@ def phase_diagram_blp_time_convergence(points=None, d_ref: int = 10,
     out = {"rows": rows, "d_ref": d_ref, "samplings": list(samplings), "t_max": t_max,
            "model": "finite-T spin-boson, pseudomodes starting in their ground state"}
     save_result("phase_diagram_blp_time_convergence",
-                {"points": points, "d_ref": d_ref, "samplings": list(samplings)}, out)
+                {"points": points, "d_ref": d_ref, "samplings": list(samplings),
+                 "solver_options": TIGHT_SOLVER_OPTIONS}, out)
     return out
 
 
@@ -1547,6 +1563,101 @@ def noisy_blp_grid_dependence(scales=(0.0, 0.5, 1.0, 2.0), dt: float = 0.15,
            "params": pars}
     save_result("noisy_blp_grid_dependence",
                 {"scales": list(scales), "trotter_dt": dt, "strides": list(strides)}, out)
+    return out
+
+
+# ===========================================================================
+# Excitonic dimer: reference convergence, Trotter convergence, and memory
+# ===========================================================================
+
+def dimer_convergence_and_memory(d_max: int = 8, trotter_dts=(0.05, 0.025, 0.0125),
+                                 quick: bool = False) -> dict:
+    """The dimer of Sec. 8 revisited on its excitonic qubit {|L>, |R>}.
+
+    (i) Reference convergence in Fock dimension d = 2..d_max: pair-optimised
+    BLP of the excitonic qubit, the acceptor population P_R(t) from |L>, and
+    max_t ||rho^(d+1)(t) - rho^(d)(t)||_1 over the six canonical inputs.
+    (ii) The circuit (two-level modes) at each Trotter step, compared on the
+    reference grid with the matched (d = 2) and the top reference.
+    (iii) The isolated dimer (g = 0) as a baseline: its dynamics is unitary, so
+    its BLP must vanish, and its population revivals are coherent.
+    Same parameters, grid (0.05) and window (t_max = 10) as phase8_dimer.
+    """
+    from .reference import dimer_qutip_excitonic_states
+    eps_L, eps_R, J = 0.5, -0.5, 1.0
+    site_modes = [(0.8, 0.25, 0.3), (0.8, 0.25, 0.3)]
+    isolated = [(w, 0.0, k) for (w, _, k) in site_modes]
+    t_max, dt_ref = 10.0, 0.05
+    n_ref = int(round(t_max / dt_ref))
+    times = np.linspace(0.0, n_ref * dt_ref, n_ref + 1)
+    dims = list(range(2, (4 if quick else d_max) + 1))
+
+    def reference(modes, d):
+        return _ic_states(lambda r0, t: dimer_qutip_excitonic_states(
+            r0, t, eps_L, eps_R, J, modes, n_fock=d, options=TIGHT_SOLVER_OPTIONS), times)
+
+    def acceptor(states):          # P_R(t) from the initial state |L> (logical |0>)
+        return np.real(np.asarray(states["0"])[:, 1, 1])
+
+    refs = {d: reference(site_modes, d) for d in dims}
+    sums = {d: _pair_summary(refs[d])[0] for d in dims}
+    top = sums[dims[-1]]
+    per_d = []
+    for d in dims:
+        entry = {"d": d, **sums[d],
+                 "eps_NM_canonical": abs(sums[d]["N_BLP_canonical"] - top["N_BLP_canonical"]),
+                 "eps_NM_optimized": abs(sums[d]["N_BLP_optimized"] - top["N_BLP_optimized"]),
+                 "max_acceptor_dev_to_dmax": float(np.max(np.abs(
+                     acceptor(refs[d]) - acceptor(refs[dims[-1]])))),
+                 "max_acceptor_population": float(np.max(acceptor(refs[d])))}
+        if d < dims[-1]:
+            entry["max_trace_norm_dev_to_next_d"] = _max_trace_norm_dev(refs[d], refs[d + 1])
+        per_d.append(entry)
+
+    idx = qc_mod.DIMER_EXCITONIC_INDEX
+    circuit = {}
+    for dt in trotter_dts:
+        n = int(round(t_max / dt))
+        res = qc_mod.run_exact([qc_mod.dimer_exact_circuit_excitonic(
+            l, n, dt, eps_L, eps_R, J, site_modes) for l in IC_INPUTS])
+        blocks = {l: np.asarray([m[np.ix_(idx, idx)]
+                                 for m in qc_mod.exact_states_from_labels(r, n)])
+                  for l, r in zip(IC_INPUTS, res)}
+        stride = int(round(dt_ref / dt))
+        on_grid = {l: v[::stride] for l, v in blocks.items()}
+        summary, _ = _pair_summary(on_grid)
+        circuit[f"{dt:g}"] = {
+            **summary,
+            "max_acceptor_dev_vs_d2": float(np.max(np.abs(acceptor(on_grid) - acceptor(refs[2])))),
+            "max_acceptor_dev_vs_dmax": float(np.max(np.abs(
+                acceptor(on_grid) - acceptor(refs[dims[-1]])))),
+            "max_acceptor_population": float(np.max(acceptor(on_grid))),
+            "acceptor_population": acceptor(on_grid),
+            "excitonic_leakage": max(float(abs(np.trace(m) - 1.0))
+                                     for v in blocks.values() for m in v)}
+
+    iso = reference(isolated, 2)        # modes decoupled: the Fock dimension is irrelevant
+    iso_sum, _ = _pair_summary(iso)
+    p_iso = acceptor(iso)
+    # the same baseline at mesolve's default tolerances: the solver-noise floor
+    iso_default, _ = _pair_summary(_ic_states(lambda r0, t: dimer_qutip_excitonic_states(
+        r0, t, eps_L, eps_R, J, isolated, n_fock=2), times))
+    out = {"per_d": per_d, "dims": dims, "d_max": dims[-1], "circuit": circuit,
+           "isolated": {**iso_sum, "max_acceptor_population": float(np.max(p_iso)),
+                        "time_of_first_maximum": float(times[int(np.argmax(p_iso[:n_ref // 3]))]),
+                        "N_BLP_optimized_default_tolerances": iso_default["N_BLP_optimized"],
+                        "N_BLP_canonical_default_tolerances": iso_default["N_BLP_canonical"]},
+           "acceptor_reference_dmax": acceptor(refs[dims[-1]]),
+           "acceptor_isolated": p_iso, "times": times,
+           "params": {"eps_L": eps_L, "eps_R": eps_R, "J": J, "site_modes": site_modes},
+           "blp_sampling_interval": dt_ref, "t_max": t_max,
+           "note": ("Memory is the pair-optimised BLP of the excitonic qubit; the "
+                    "isolated dimer is unitary, so its BLP must vanish. References use "
+                    "TIGHT_SOLVER_OPTIONS; the *_default_tolerances entries give the "
+                    "isolated dimer at mesolve's defaults (the solver-noise floor).")}
+    save_result("dimer_convergence_and_memory",
+                {"d_max": dims[-1], "trotter_dts": list(trotter_dts), "quick": quick,
+                 "solver_options": TIGHT_SOLVER_OPTIONS}, out)
     return out
 
 

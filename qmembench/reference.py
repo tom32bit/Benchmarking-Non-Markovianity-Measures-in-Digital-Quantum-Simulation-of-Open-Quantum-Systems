@@ -36,9 +36,33 @@ from .measures import KET, dm
 # Explicit operator definitions to pin conventions (|1> = excited):
 SM_NP = np.array([[0, 1], [0, 0]], dtype=complex)  # sigma- = |0><1|
 
+# mesolve tolerances for the revision studies.  With QuTiP's defaults the
+# solver error survives the positive-part sum of the BLP measure as a floor
+# (isolated dimer: 6.7e-5 at the defaults, 2.3e-8 at these).  The published
+# functions keep the defaults when options is None.
+TIGHT_SOLVER_OPTIONS = {"atol": 1e-12, "rtol": 1e-10}
+
 
 def _sys_qobj(rho: np.ndarray) -> qt.Qobj:
     return qt.Qobj(np.asarray(rho, dtype=complex))
+
+
+def _solve_system_states(H, rho0, times, c_ops, options=None) -> list[np.ndarray]:
+    """mesolve, returning the reduced state of the first tensor factor at each
+    time.  rho_sys[a, b] = Tr[rho (|b><a| (x) 1)] is read from expectation
+    values, so no full state is stored: the same integration as ptrace over
+    sol.states, at O(1) memory per output time."""
+    dims = rho0.dims[0]
+    d0 = dims[0]
+    rest = [qt.qeye(d) for d in dims[1:]]
+    pairs = [(a, b) for a in range(d0) for b in range(d0)]
+    e_ops = [qt.tensor(qt.basis(d0, b) * qt.basis(d0, a).dag(), *rest) for a, b in pairs]
+    sol = qt.mesolve(H, rho0, np.asarray(times, dtype=float), c_ops=c_ops, e_ops=e_ops,
+                     options=options)
+    out = np.zeros((len(times), d0, d0), dtype=complex)
+    for (a, b), vals in zip(pairs, sol.expect):
+        out[:, a, b] = vals
+    return list(out)
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +132,7 @@ def stageA_params(gamma0: float, lam: float) -> tuple[float, float]:
 # ---------------------------------------------------------------------------
 
 def stageA_qutip_states(rho0_sys: np.ndarray, times: np.ndarray, gamma0: float,
-                        lam: float, n_fock: int = 2) -> list[np.ndarray]:
+                        lam: float, n_fock: int = 2, options: dict | None = None) -> list[np.ndarray]:
     """mesolve on system (x) single damped pseudomode; exact for Lorentzian.
 
     NOTE: QuTiP has no dedicated 'pseudomode solver' -- this enlarged-space
@@ -122,8 +146,7 @@ def stageA_qutip_states(rho0_sys: np.ndarray, times: np.ndarray, gamma0: float,
     H = omega * (qt.tensor(sm.dag(), a) + qt.tensor(sm, a.dag()))
     c_ops = [np.sqrt(kappa) * qt.tensor(qt.qeye(2), a)]
     rho0 = qt.tensor(_sys_qobj(rho0_sys), qt.fock_dm(n_fock, 0))
-    sol = qt.mesolve(H, rho0, np.asarray(times, dtype=float), c_ops=c_ops)
-    return [np.asarray(s.ptrace(0).full()) for s in sol.states]
+    return _solve_system_states(H, rho0, times, c_ops, options)
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +154,8 @@ def stageA_qutip_states(rho0_sys: np.ndarray, times: np.ndarray, gamma0: float,
 # ---------------------------------------------------------------------------
 
 def stageA_qutip_states_finiteT(rho0_sys: np.ndarray, times: np.ndarray, gamma0: float,
-                                lam: float, n_th: float, n_fock: int = 2) -> list[np.ndarray]:
+                                lam: float, n_th: float, n_fock: int = 2,
+                                options: dict | None = None) -> list[np.ndarray]:
     """Thermal-reservoir reference: the pseudomode is damped toward mean
     occupation n_th via emission sqrt(kappa(n_th+1)) a and absorption
     sqrt(kappa n_th) a^dag.
@@ -150,8 +174,7 @@ def stageA_qutip_states_finiteT(rho0_sys: np.ndarray, times: np.ndarray, gamma0:
     c_ops = [np.sqrt(kappa * (n_th + 1.0)) * qt.tensor(qt.qeye(2), a),
              np.sqrt(kappa * n_th) * qt.tensor(qt.qeye(2), a.dag())]
     rho0 = qt.tensor(_sys_qobj(rho0_sys), qt.fock_dm(n_fock, 0))
-    sol = qt.mesolve(H, rho0, np.asarray(times, dtype=float), c_ops=c_ops)
-    return [np.asarray(s.ptrace(0).full()) for s in sol.states]
+    return _solve_system_states(H, rho0, times, c_ops, options)
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +184,7 @@ def stageA_qutip_states_finiteT(rho0_sys: np.ndarray, times: np.ndarray, gamma0:
 def spin_boson_qutip_states(rho0_sys: np.ndarray, times: np.ndarray,
                             delta: float, eps: float,
                             modes: list[tuple[float, float, float]],
-                            n_fock: int = 4) -> list[np.ndarray]:
+                            n_fock: int = 4, options: dict | None = None) -> list[np.ndarray]:
     """mesolve reference for H_S = (delta/2) sx + (eps/2) sz coupled via
     sigma_z (x) g_k (a_k + a_k^dag) to damped pseudomodes (w_k, g_k, kappa_k).
 
@@ -194,14 +217,14 @@ def spin_boson_qutip_states(rho0_sys: np.ndarray, times: np.ndarray,
         c_ops.append(np.sqrt(kappak) * emb_mode(a, k))
 
     rho0 = qt.tensor(_sys_qobj(rho0_sys), *[qt.fock_dm(n_fock, 0)] * n_modes)
-    sol = qt.mesolve(H, rho0, np.asarray(times, dtype=float), c_ops=c_ops)
-    return [np.asarray(s.ptrace(0).full()) for s in sol.states]
+    return _solve_system_states(H, rho0, times, c_ops, options)
 
 
 def spin_boson_qutip_states_finiteT(rho0_sys: np.ndarray, times: np.ndarray,
                                     delta: float, eps: float,
                                     modes: list[tuple[float, float, float]],
-                                    n_th: float, n_fock: int = 4) -> list[np.ndarray]:
+                                    n_th: float, n_fock: int = 4,
+                                    options: dict | None = None) -> list[np.ndarray]:
     """Finite-temperature spin-boson reference: as spin_boson_qutip_states, but
     each damped pseudomode relaxes toward a thermal occupation n_th through
     emission sqrt(kappa(n_th+1)) a and absorption sqrt(kappa n_th) a^dag.
@@ -236,8 +259,7 @@ def spin_boson_qutip_states_finiteT(rho0_sys: np.ndarray, times: np.ndarray,
             c_ops.append(np.sqrt(kappak * n_th) * emb_mode(a.dag(), k))
 
     rho0 = qt.tensor(_sys_qobj(rho0_sys), *[qt.fock_dm(n_fock, 0)] * n_modes)
-    sol = qt.mesolve(H, rho0, np.asarray(times, dtype=float), c_ops=c_ops)
-    return [np.asarray(s.ptrace(0).full()) for s in sol.states]
+    return _solve_system_states(H, rho0, times, c_ops, options)
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +278,17 @@ def dimer_qutip_populations(times, eps_L, eps_R, J, site_modes, n_fock=3):
     Initial state: excitation localised on site L. Returns
     (P_L(t), P_R(t)) site excitation populations.
     """
+    H, c_ops, nL, nR = _dimer_operators(eps_L, eps_R, J, site_modes, n_fock)
+    # excitation on L: |1>_L |0>_R |0>_mL |0>_mR
+    psi0 = qt.tensor(qt.basis(2, 1), qt.basis(2, 0),
+                     qt.basis(n_fock, 0), qt.basis(n_fock, 0))
+    sol = qt.mesolve(H, psi0, np.asarray(times, float), c_ops=c_ops, e_ops=[nL, nR])
+    return np.real(sol.expect[0]), np.real(sol.expect[1])
+
+
+def _dimer_operators(eps_L, eps_R, J, site_modes, n_fock):
+    """Hamiltonian, collapse operators and site-number operators of the dimer
+    on site L (x) site R (x) mode L (x) mode R; index 1 of a site is occupied."""
     nL = qt.tensor(qt.num(2), qt.qeye(2), qt.qeye(n_fock), qt.qeye(n_fock))
     nR = qt.tensor(qt.qeye(2), qt.num(2), qt.qeye(n_fock), qt.qeye(n_fock))
     smL = qt.tensor(qt.sigmam(), qt.qeye(2), qt.qeye(n_fock), qt.qeye(n_fock))
@@ -270,11 +303,32 @@ def dimer_qutip_populations(times, eps_L, eps_R, J, site_modes, n_fock=3):
          + wL * aL.dag() * aL + wR * aR.dag() * aR
          + gL * szL * (aL + aL.dag()) + gR * szR * (aR + aR.dag()))
     c_ops = [np.sqrt(kapL) * aL, np.sqrt(kapR) * aR]
-    # excitation on L: |1>_L |0>_R |0>_mL |0>_mR
-    psi0 = qt.tensor(qt.basis(2, 1), qt.basis(2, 0),
-                     qt.basis(n_fock, 0), qt.basis(n_fock, 0))
-    sol = qt.mesolve(H, psi0, np.asarray(times, float), c_ops=c_ops, e_ops=[nL, nR])
-    return np.real(sol.expect[0]), np.real(sol.expect[1])
+    return H, c_ops, nL, nR
+
+
+# Two-site basis index (site L, site R; 2 * i_L + i_R) of the excitonic qubit
+# states: logical |0> = excitation on L, logical |1> = excitation on R.
+_EXCITONIC_INDEX = [2, 1]
+
+
+def dimer_qutip_excitonic_states(rho0_exc, times, eps_L, eps_R, J, site_modes, n_fock=3,
+                                 options=None):
+    """The dimer as a channel on its single-excitation ('excitonic') qubit.
+
+    The model conserves the number of site excitations (the sigma_z coupling
+    is diagonal in it, and the damping acts on the modes), so the 2x2 block of
+    the two-site state on {|L>, |R>} is the output of a qubit channel.
+    ``rho0_exc`` is the initial 2x2 state in that basis; the modes start in
+    their ground state. Returns the 2x2 blocks at ``times``.
+    """
+    H, c_ops, _, _ = _dimer_operators(eps_L, eps_R, J, site_modes, n_fock)
+    sites = np.zeros((4, 4), dtype=complex)
+    idx = _EXCITONIC_INDEX
+    sites[np.ix_(idx, idx)] = np.asarray(rho0_exc, dtype=complex)
+    rho0 = qt.tensor(qt.Qobj(sites, dims=[[2, 2], [2, 2]]),
+                     qt.fock_dm(n_fock, 0), qt.fock_dm(n_fock, 0))
+    sol = qt.mesolve(H, rho0, np.asarray(times, float), c_ops=c_ops, options=options)
+    return [s.ptrace([0, 1]).full()[np.ix_(idx, idx)] for s in sol.states]
 
 
 # ---------------------------------------------------------------------------

@@ -220,27 +220,67 @@ def dimer_exact_circuit(n_steps: int, dt: float, eps_L: float, eps_R: float, J: 
 
     Per step: site energies (RZ), excitonic hop (RXX+RYY on the two sites),
     mode energies (RZ), site-mode dephasing (RZX), mode damping (dilation)."""
-    (wL, gL, kapL), (wR, gR, kapR) = site_modes
     qc = QuantumCircuit(5)
     qc.x(0)  # excitation localised on site L
     qc.save_density_matrix(qubits=[0], label="L_0")
     qc.save_density_matrix(qubits=[1], label="R_0")
     for k in range(1, n_steps + 1):
-        # site energy eps*n = eps*(I-Z)/2 -> e^{-i eps n dt} = diag(1,e^{-i eps dt});
-        # rz(lambda)=diag(e^{-i lam/2}, e^{+i lam/2}), so lambda = -eps*dt matches.
-        qc.rz(-eps_L * dt, 0)
-        qc.rz(-eps_R * dt, 1)
-        qc.rxx(J * dt, 0, 1)          # excitonic hop = (J/2)(XX+YY)
-        qc.ryy(J * dt, 0, 1)
-        qc.rz(-wL * dt, 2)
-        qc.rz(-wR * dt, 3)
-        qc.rzx(2.0 * gL * dt, 0, 2)   # site-L dephasing coupling
-        qc.rzx(2.0 * gR * dt, 1, 3)   # site-R dephasing coupling
-        amplitude_damping_block(qc, target=2, anc=4, p=1.0 - np.exp(-kapL * dt))
-        amplitude_damping_block(qc, target=3, anc=4, p=1.0 - np.exp(-kapR * dt))
+        _dimer_step(qc, dt, eps_L, eps_R, J, site_modes)
         if k % save_every == 0 or k == n_steps:
             qc.save_density_matrix(qubits=[0], label=f"L_{k}")
             qc.save_density_matrix(qubits=[1], label=f"R_{k}")
+    return qc
+
+
+def _dimer_step(qc: QuantumCircuit, dt: float, eps_L: float, eps_R: float, J: float,
+                site_modes) -> None:
+    """One Trotter step of the dimer (q0 = site L, q1 = site R, q2/q3 = modes,
+    q4 = damping ancilla)."""
+    (wL, gL, kapL), (wR, gR, kapR) = site_modes
+    # site energy eps*n = eps*(I-Z)/2 -> e^{-i eps n dt} = diag(1,e^{-i eps dt});
+    # rz(lambda)=diag(e^{-i lam/2}, e^{+i lam/2}), so lambda = -eps*dt matches.
+    qc.rz(-eps_L * dt, 0)
+    qc.rz(-eps_R * dt, 1)
+    qc.rxx(J * dt, 0, 1)          # excitonic hop = (J/2)(XX+YY)
+    qc.ryy(J * dt, 0, 1)
+    qc.rz(-wL * dt, 2)
+    qc.rz(-wR * dt, 3)
+    qc.rzx(2.0 * gL * dt, 0, 2)   # site-L dephasing coupling
+    qc.rzx(2.0 * gR * dt, 1, 3)   # site-R dephasing coupling
+    amplitude_damping_block(qc, target=2, anc=4, p=1.0 - np.exp(-kapL * dt))
+    amplitude_damping_block(qc, target=3, anc=4, p=1.0 - np.exp(-kapR * dt))
+
+
+# Indices of the excitonic qubit states in the saved two-site state (little
+# endian, q0 + 2 q1): logical |0> = |L> (q0 excited), logical |1> = |R>.
+DIMER_EXCITONIC_INDEX = [1, 2]
+
+
+def dimer_exact_circuit_excitonic(init: str, n_steps: int, dt: float, eps_L: float,
+                                  eps_R: float, J: float, site_modes,
+                                  save_every: int = 1) -> QuantumCircuit:
+    """The dimer circuit started in an excitonic-qubit state, saving the
+    two-site state as 'rho_k' (4x4). ``init`` is '0' (|L>), '1' (|R>), '+'
+    ((|L> + |R>)/sqrt2) or '+i' ((|L> + i|R>)/sqrt2); the excitonic block of
+    each saved state sits at DIMER_EXCITONIC_INDEX."""
+    qc = QuantumCircuit(5)
+    if init == "0":
+        qc.x(0)
+    elif init == "1":
+        qc.x(1)
+    elif init in ("+", "+i"):
+        qc.h(0)
+        qc.cx(0, 1)
+        qc.x(1)                   # (|L> + |R>)/sqrt2
+        if init == "+i":
+            qc.s(1)               # (|L> + i|R>)/sqrt2
+    else:
+        raise ValueError(f"unknown excitonic state label {init!r}")
+    qc.save_density_matrix(qubits=[0, 1], label="rho_0")
+    for k in range(1, n_steps + 1):
+        _dimer_step(qc, dt, eps_L, eps_R, J, site_modes)
+        if k % save_every == 0 or k == n_steps:
+            qc.save_density_matrix(qubits=[0, 1], label=f"rho_{k}")
     return qc
 
 

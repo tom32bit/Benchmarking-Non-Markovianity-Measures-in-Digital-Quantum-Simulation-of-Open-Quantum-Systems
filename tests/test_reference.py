@@ -61,3 +61,24 @@ def test_discrete_blp_approaches_the_continuum_value():
     assert all(d > 0 for d in deficits)
     assert deficits[0] > deficits[1] > deficits[2]
     assert deficits[2] < 1e-3
+
+
+def test_reduced_states_from_expectations_match_partial_trace():
+    """_solve_system_states reads rho_sys from expectations of |b><a| (x) 1;
+    it must equal ptrace(0) of the stored states of the same solve."""
+    import qutip as qt
+    from qmembench.reference import TIGHT_SOLVER_OPTIONS, _solve_system_states
+    a2, a3 = qt.destroy(2), qt.destroy(3)
+    H = (0.7 * qt.tensor(qt.sigmax(), qt.qeye(3), qt.qeye(2))
+         + 0.4 * qt.tensor(qt.sigmaz(), a3 + a3.dag(), qt.qeye(2))
+         + 0.3 * qt.tensor(qt.sigmay(), qt.qeye(3), a2 + a2.dag())
+         + 1.1 * qt.tensor(qt.qeye(2), a3.dag() * a3, qt.qeye(2)))
+    c_ops = [0.5 * qt.tensor(qt.qeye(2), a3, qt.qeye(2)),
+             0.2 * qt.tensor(qt.qeye(2), a3.dag(), qt.qeye(2)),
+             0.4 * qt.tensor(qt.qeye(2), qt.qeye(3), a2)]
+    rho0 = qt.tensor(qt.Qobj(dm("+i")), qt.fock_dm(3, 0), qt.fock_dm(2, 1))
+    times = np.linspace(0.0, 3.0, 31)
+    got = _solve_system_states(H, rho0, times, c_ops, TIGHT_SOLVER_OPTIONS)
+    ref = qt.mesolve(H, rho0, times, c_ops=c_ops, options=TIGHT_SOLVER_OPTIONS).states
+    np.testing.assert_allclose(np.asarray(got), np.asarray([s.ptrace(0).full() for s in ref]),
+                               atol=1e-12)

@@ -9,6 +9,7 @@ from qmembench.reference import analytic_stageA_states
 def test_provenance_records_code_and_library_versions():
     prov = _provenance({"x": 1}, seed=3)
     assert "git_commit" in prov                  # None only if git is unavailable
+    assert "git_commit_at_import" in prov
     assert set(prov["versions"]) >= {"numpy", "scipy", "qiskit", "qiskit_aer", "qutip"}
     assert prov["seed"] == 3 and prov["params"] == {"x": 1}
 

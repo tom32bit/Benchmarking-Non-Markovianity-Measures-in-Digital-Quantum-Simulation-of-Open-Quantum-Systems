@@ -37,3 +37,50 @@ def test_circuit_matches_qutip_populations():
     # matched truncation (n_fock=2): only Trotter error remains, percent-level
     assert np.max(np.abs(PR_c - PR_ref)) < 0.03
     assert np.max(np.abs(PL_c - PL_ref)) < 0.03
+
+
+MODES = [(0.8, 0.25, 0.3), (0.8, 0.25, 0.3)]
+
+
+def test_excitonic_reference_reproduces_site_populations():
+    """The excitonic-qubit reference started in |L> gives the published P_L, P_R."""
+    from qmembench.reference import dimer_qutip_excitonic_states
+    times = np.linspace(0, 4, 41)
+    PL, PR = dimer_qutip_populations(times, 0.5, -0.5, 1.0, MODES, n_fock=3)
+    blocks = dimer_qutip_excitonic_states(np.diag([1.0, 0.0]), times, 0.5, -0.5, 1.0,
+                                          MODES, n_fock=3)
+    np.testing.assert_allclose([b[0, 0].real for b in blocks], PL, atol=1e-6)
+    np.testing.assert_allclose([b[1, 1].real for b in blocks], PR, atol=1e-6)
+
+
+def test_excitonic_circuit_matches_site_circuit_and_prepares_states():
+    from qmembench.circuits import (DIMER_EXCITONIC_INDEX, dimer_exact_circuit_excitonic,
+                                    exact_states_from_labels)
+    idx = DIMER_EXCITONIC_INDEX
+    n, dt = 20, 0.05
+    _, PR_old = dimer_populations_from_data(
+        run_exact([dimer_exact_circuit(n, dt, 0.5, -0.5, 1.0, MODES)])[0], n)
+    new = exact_states_from_labels(run_exact([dimer_exact_circuit_excitonic(
+        "0", n, dt, 0.5, -0.5, 1.0, MODES)])[0], n)
+    np.testing.assert_allclose([m[np.ix_(idx, idx)][1, 1].real for m in new], PR_old,
+                               atol=1e-10)
+    start = exact_states_from_labels(run_exact([dimer_exact_circuit_excitonic(
+        "+i", 1, dt, 0.5, -0.5, 1.0, MODES)])[0], 1)[0]
+    np.testing.assert_allclose(start[np.ix_(idx, idx)],
+                               0.5 * np.array([[1, -1j], [1j, 1]]), atol=1e-12)
+
+
+def test_isolated_dimer_has_no_memory_and_coherent_transfer():
+    """g = 0: unitary on the excitonic qubit, so no backflow; the acceptor
+    population peaks at 4J^2 / (dE^2 + 4J^2) = 0.8 (coherent oscillation).
+    Tight tolerances: at mesolve's defaults the solver error alone gives ~7e-5."""
+    from qmembench.measures import blp_optimize_pair, dm, pauli_images_from_states
+    from qmembench.reference import TIGHT_SOLVER_OPTIONS, dimer_qutip_excitonic_states
+    times = np.linspace(0, 10, 201)
+    iso = [(0.8, 0.0, 0.3), (0.8, 0.0, 0.3)]
+    states = {l: dimer_qutip_excitonic_states(dm(l), times, 0.5, -0.5, 1.0, iso, n_fock=2,
+                                              options=TIGHT_SOLVER_OPTIONS)
+              for l in ("0", "1", "+", "+i")}
+    res = blp_optimize_pair(pauli_images_from_states(states), n_grid=500)
+    assert res["N_BLP_optimized"] < 1e-6
+    assert max(s[1, 1].real for s in states["0"]) == pytest.approx(0.8, abs=2e-3)
