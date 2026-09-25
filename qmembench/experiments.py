@@ -1041,6 +1041,133 @@ def phase5_fock_rule(quick: bool = False, eps: float = 1e-2, c_var: float = 3.0)
 
 
 # ===========================================================================
+# Finite-T circuit error budget against its matched truncation (T2.6)
+# ===========================================================================
+
+def finiteT_error_budget(n_ths=(0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5),
+                         dts=(0.1, 0.05, 0.025, 0.0125), t_max: float = 10.0) -> dict:
+    """The Table 1 circuit against QuTiP on its own model (n = 2) at each
+    Trotter step: trajectory error (max over six inputs and the common times,
+    multiples of max(dts), of the trace distance and of the element-wise
+    deviation) and the pair-optimised BLP error on each step's own grid."""
+    pars = STAGEA_NONMARKOV
+    omega, kappa = stageA_params(**pars)
+    dts = sorted(dts, reverse=True)
+    fine = dts[-1]
+    n_fine = int(round(t_max / fine))
+    t_fine = np.linspace(0.0, n_fine * fine, n_fine + 1)
+    rows = []
+    for n_th in n_ths:
+        ref_ic = _ic_states(lambda r0, t: stageA_qutip_states_finiteT(
+            r0, t, **pars, n_th=n_th, n_fock=2, options=TIGHT_SOLVER_OPTIONS), t_fine)
+        ref = _six_from_ic(ref_ic)
+        per = []
+        for dt in dts:
+            n = int(round(t_max / dt))
+            res = qc_mod.run_exact([qc_mod.stageA_exact_circuit(l, n, dt, omega, kappa, n_th=n_th)
+                                    for l in IC_INPUTS])
+            ic = {l: np.asarray(qc_mod.exact_states_from_labels(r, n)) for l, r in zip(IC_INPUTS, res)}
+            circ = _six_from_ic(ic)
+            sc, sr = int(round(dts[0] / dt)), int(round(dts[0] / fine))
+            tn = max(max(0.5 * trace_norm(a - b) for a, b in zip(circ[l][::sc], ref[l][::sr])) for l in ref)
+            el = max(float(np.max(np.abs(circ[l][::sc] - ref[l][::sr]))) for l in ref)
+            stride = int(round(dt / fine))
+            n_c = _pair_summary(ic)[0]["N_BLP_optimized"]
+            n_r = _pair_summary({l: ref_ic[l][::stride] for l in IC_INPUTS})[0]["N_BLP_optimized"]
+            per.append({"dt": dt, "trajectory_trace_distance": tn, "trajectory_elementwise": el,
+                        "N_opt_circuit": n_c, "N_opt_reference": n_r, "blp_error": abs(n_c - n_r)})
+        rows.append({"n_th": n_th, "per_dt": per})
+    out = {"rows": rows, "dts": dts, "t_max": t_max, "params": pars,
+           "reference": "QuTiP n_fock = 2 (the circuit's model), TIGHT_SOLVER_OPTIONS"}
+    save_result("finiteT_error_budget", {"n_ths": list(n_ths), "dts": dts, "t_max": t_max,
+                                         "solver_options": TIGHT_SOLVER_OPTIONS}, out)
+    return out
+
+
+# ===========================================================================
+# Strong-coupling excess and the Hilbert-space boundary (T2.14, rule R14)
+# ===========================================================================
+
+def _boundary_point(args) -> dict:
+    """Optimal-pair D(t), boundary population and excess BLP of the spin-boson
+    at one coupling and Fock dimension (process-pool friendly)."""
+    from .reference import TIGHT_SOLVER_OPTIONS as TIGHT, _solve_states_and_moments
+    import qutip as qt
+    g, d, times = args
+    proto = [(1.0, 0.4), (1.6, 0.8)]
+    modes = [(w, g, k) for w, k in proto]
+    sx, sz = qt.sigmax(), qt.sigmaz()
+    ident = [qt.qeye(d)] * 2
+
+    def emb_mode(op, k):
+        ops = [qt.qeye(2)] + list(ident)
+        ops[1 + k] = op
+        return qt.tensor(*ops)
+
+    a = qt.destroy(d)
+    H = 0.5 * 1.0 * qt.tensor(sx, *ident)
+    c_ops = []
+    for k, (wk, gk, kk) in enumerate(modes):
+        H += wk * emb_mode(a.dag() * a, k) + gk * qt.tensor(sz, *ident) * emb_mode(a + a.dag(), k)
+        c_ops.append(np.sqrt(kk) * emb_mode(a, k))
+    tops = [emb_mode(qt.fock_dm(d, d - 1), k) for k in range(2)]
+    states, P = {}, {}
+    for l in IC_INPUTS:
+        rho0 = qt.tensor(qt.Qobj(dm(l)), *[qt.fock_dm(d, 0)] * 2)
+        st, mom = _solve_states_and_moments(H, rho0, times, c_ops, tops, TIGHT)
+        states[l], P[l] = np.asarray(st), mom[:, 0, :]          # projector: first moment
+    summ, images = _pair_summary(states)
+    n = np.asarray(summ["n_opt"], dtype=float)
+    diff = np.einsum("k,tkab->tab", n, np.asarray(images))      # Lambda(n . sigma)
+    D = np.array([0.5 * trace_norm(x) for x in diff])
+    P_I = P["0"] + P["1"]
+    P_sig = [2 * P["+"] - P_I, 2 * P["+i"] - P_I, P["0"] - P["1"]]
+    P_pair = [0.5 * P_I + sgn * 0.5 * sum(nk * Pk for nk, Pk in zip(n, P_sig)) for sgn in (1, -1)]
+    P_bnd = np.max(np.stack([np.max(x, axis=0) for x in P_pair]), axis=0)   # over modes and pair
+    inc = np.diff(D)
+    mid = 0.5 * (P_bnd[:-1] + P_bnd[1:])
+    pos = inc > 0
+    high = mid > np.median(mid)
+    b_frac = float(inc[pos & high].sum() / inc[pos].sum()) if inc[pos].sum() > 0 else float("nan")
+    return {"g": g, "d": d, "N_opt": summ["N_BLP_optimized"], "n_opt": n,
+            "peak_boundary_population": float(P_bnd.max()),
+            "mean_boundary_population": float(P_bnd.mean()),
+            "backflow_share_above_median_boundary": b_frac}
+
+
+def boundary_mechanism_study(gs=(0.3, 0.4, 0.5, 0.7), dims=(2, 3, 4, 5, 6), d_ref: int = 10,
+                             sampling: float = 0.003125, t_max: float = 10.0,
+                             n_workers: int = 1) -> dict:
+    """R14: does the n = 2 excess backflow at strong coupling track the
+    population of the highest retained Fock level (B-T2)?"""
+    n = int(round(t_max / sampling))
+    times = np.linspace(0.0, n * sampling, n + 1)
+    tasks = [(float(g), int(d), times) for g in gs for d in list(dims) + [d_ref]]
+    config = {"function": "boundary_mechanism_study", "gs": list(gs), "dims": list(dims),
+              "d_ref": d_ref, "sampling": sampling, "t_max": t_max,
+              "solver_options": TIGHT_SOLVER_OPTIONS}
+    pts, segments = _run_points_with_checkpoint(_boundary_point, tasks, n_workers,
+                                                "boundary_mechanism_study", config)
+    rows = []
+    for g in gs:
+        by_d = {p["d"]: p for p in pts if p["g"] == g}
+        ref = by_d[d_ref]["N_opt"]
+        excess = [by_d[d]["N_opt"] - ref for d in dims]
+        peak = [by_d[d]["peak_boundary_population"] for d in dims]
+        same_order = bool(np.array_equal(np.argsort(excess, kind="stable"), np.argsort(peak, kind="stable")))
+        from scipy.stats import spearmanr
+        rows.append({"g": g, "N_ref": ref, "per_d": [by_d[d] for d in dims], "excess": excess,
+                     "peak_boundary": peak, "same_rank_order": same_order,
+                     "spearman": float(spearmanr(excess, peak).statistic),
+                     "b_frac_d2": by_d[dims[0]]["backflow_share_above_median_boundary"]})
+    out = {"rows": rows, "dims": list(dims), "d_ref": d_ref, "sampling": sampling, "t_max": t_max,
+           "checkpoint_segments_commit_at_import": segments,
+           "note": "P_bnd = <d-1|rho_mode|d-1>, max over both modes and both optimal-pair states."}
+    save_result("boundary_mechanism_study", {k: v for k, v in config.items() if k != "function"}, out)
+    return out
+
+
+# ===========================================================================
 # Revised Fock-dimension rule (T2.8, rule R13)
 # ===========================================================================
 
