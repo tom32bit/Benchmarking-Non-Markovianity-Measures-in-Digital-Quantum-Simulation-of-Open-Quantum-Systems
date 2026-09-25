@@ -1321,6 +1321,64 @@ def noisy_pair_check(scales=(0.0, 0.5, 1.0, 2.0), dt: float = 0.15) -> dict:
     return out
 
 
+def _run_points_with_checkpoint(fn, tasks, n_workers: int, name: str, config: dict) -> tuple:
+    """Run fn over independent tasks, appending each finished result to
+    RESULTS_DIR/checkpoints/<name>.jsonl, and resume from that file.
+
+    The file starts each run segment with a header carrying ``config`` and the
+    commit at import; a checkpoint written for another configuration is
+    refused. When all points are done the file is renamed <name>.jsonl.done so
+    a later run starts fresh. Returns (results in task order, segment commits).
+    Keys of dict results come back as strings; callers convert them."""
+    import os
+    ck_dir = RESULTS_DIR / "checkpoints"
+    ck_dir.mkdir(parents=True, exist_ok=True)
+    path = ck_dir / f"{name}.jsonl"
+    config = json.loads(json.dumps(config, default=_jsonable))
+    done, segments = {}, []
+    if path.exists():
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:          # a line cut off by a kill
+                    continue
+                if rec.get("kind") == "header":
+                    if rec["config"] != config:
+                        raise ValueError(f"{path} was written for another configuration")
+                    segments.append(rec["git_commit_at_import"])
+                elif rec.get("kind") == "point":
+                    done[rec["index"]] = rec["result"]
+    segments.append(_GIT_COMMIT_AT_IMPORT)
+    todo = [i for i in range(len(tasks)) if i not in done]
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"kind": "header", "config": config,
+                             "git_commit_at_import": _GIT_COMMIT_AT_IMPORT,
+                             "resumed_with_done": len(done)}) + "\n")
+        fh.flush()
+
+        def record(i, res):
+            fh.write(json.dumps({"kind": "point", "index": i, "result": res},
+                                default=_jsonable) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+            done[i] = json.loads(json.dumps(res, default=_jsonable))
+
+        if n_workers > 1 and todo:
+            from concurrent.futures import ProcessPoolExecutor, as_completed
+            with ProcessPoolExecutor(max_workers=n_workers) as pool:
+                futures = {pool.submit(fn, tasks[i]): i for i in todo}
+                for fut in as_completed(futures):
+                    record(futures[fut], fut.result())
+        else:
+            for i in todo:
+                record(i, fn(tasks[i]))
+    path.replace(path.with_name(path.name + ".done"))
+    return [done[i] for i in range(len(tasks))], segments
+
+
 def _phase9_point(args) -> dict:
     """One (g, n_th) point of the pair-optimised phase diagram: canonical (+,-)
     and optimised BLP at each Fock dimension in ``dims`` (a process-pool worker)."""
@@ -1362,12 +1420,13 @@ def phase9_truncation_phase_diagram_optimized(quick: bool = False, d_ref: int = 
     n_ths = np.linspace(0.0, 1.5, n_n)
     dims = sorted({2, d_check, d_ref})
     tasks = [(float(g), float(n), dims, times, delta, eps, proto) for n in n_ths for g in gs]
-    if n_workers > 1:
-        from concurrent.futures import ProcessPoolExecutor
-        with ProcessPoolExecutor(max_workers=n_workers) as pool:
-            results = list(pool.map(_phase9_point, tasks, chunksize=2))
-    else:
-        results = [_phase9_point(t) for t in tasks]
+    config = {"function": "phase9_truncation_phase_diagram_optimized", "grid": [n_g, n_n],
+              "d_ref": d_ref, "d_check": d_check, "sampling": dt, "t_max": t_max,
+              "solver_options": TIGHT_SOLVER_OPTIONS}
+    raw, segments = _run_points_with_checkpoint(
+        _phase9_point, tasks, n_workers,
+        f"phase9_optimized_{n_g}x{n_n}_d{d_ref}_{d_check}_s{dt:g}", config)
+    results = [{int(k): v for k, v in r.items()} for r in raw]
     shape = (len(n_ths), len(gs))
 
     def field(d, key):
@@ -1388,7 +1447,8 @@ def phase9_truncation_phase_diagram_optimized(quick: bool = False, d_ref: int = 
            "max_budget_change": max(r[d]["budget_change"] for r in results for d in dims),
            "model": "finite-T spin-boson, pseudomodes starting in their ground state",
            "delta": delta, "eps": eps, "modes_w_kappa": proto,
-           "blp_sampling_interval": dt, "t_max": t_max}
+           "blp_sampling_interval": dt, "t_max": t_max,
+           "checkpoint_segments_commit_at_import": segments}
     save_result("phase9_truncation_phase_diagram_optimized",
                 {"grid": [n_g, n_n], "d_ref": d_ref, "d_check": d_check,
                  "blp_sampling_interval": dt, "t_max": t_max,
@@ -1727,6 +1787,90 @@ def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.
     save_result(record or f"joint_fock_time_{family}",
                 {"family": family, "dims": dims, "sampling": sampling, "t_max": t_max,
                  "solver_options": TIGHT_SOLVER_OPTIONS}, out)
+    return out
+
+
+# ===========================================================================
+# Pseudomode vs chain at equal gate cost (T2.13, rule R2)
+# ===========================================================================
+
+def _pareto_front(points):
+    """Lower envelope of (cx, error): keep a point only if no point with
+    fewer or equal CX has a lower error."""
+    front, best = [], np.inf
+    for cx, err in sorted(points):
+        if err < best:
+            front.append((cx, err))
+            best = err
+    return front
+
+
+def gate_count_study(dts_pm=(0.45, 0.3, 0.225, 0.15, 0.1, 0.075, 0.05),
+                     chain_dts=(0.3, 0.15, 0.1), chain_Ms=(1, 2, 3, 4, 5),
+                     t_max: float = 9.0, n_compare: int = 50) -> dict:
+    """BLP error against transpiled CX count for the pseudomode (over the Trotter
+    step) and the fitted chain (over M and step), Stage A. Error is taken
+    against the discrete BLP of the closed-form |G| on the same grid, so the
+    grid itself cancels. The optimal-pair trace distance of both embeddings
+    is |c_0| (collision.chain_excitation_amplitude)."""
+    pars = STAGEA_NONMARKOV
+    omega, kappa = stageA_params(**pars)
+
+    def exact_blp(dt):
+        n = int(round(t_max / dt))
+        return blp_from_curve(np.abs(analytic_G(np.linspace(0.0, n * dt, n + 1), **pars))), n
+
+    pm = []
+    for dt in dts_pm:
+        N_ex, n = exact_blp(dt)
+        c0 = col_mod.chain_excitation_amplitude(n, 1, omega * dt, 0.0, 1.0 - np.exp(-kappa * dt))
+        N = blp_from_curve(np.abs(c0))
+        cx = qc_mod.resource_counts(qc_mod.stageA_exact_circuit(
+            "+", n, dt, omega, kappa, save_every=n))["cx_count"]
+        pm.append({"dt": dt, "n_steps": n, "cx": cx, "N_BLP": N, "N_exact_grid": N_ex,
+                   "error": abs(N - N_ex)})
+    chain = []
+    for dt in chain_dts:
+        N_ex, n = exact_blp(dt)
+        target = np.abs(analytic_G(np.linspace(0.0, n * dt, n + 1), **pars)) ** 2
+        for M in chain_Ms:
+            fit = col_mod.fit_chain_params_bounded(target, n, M)
+            c0 = col_mod.chain_excitation_amplitude(n, M, fit["theta_s"], fit["theta_hop"], fit["p_loss"])
+            N = blp_from_curve(np.abs(c0))
+            cx = qc_mod.resource_counts(col_mod.chain_collision_exact_circuit(
+                "+", n, M, fit["theta_s"], fit["theta_hop"], fit["p_loss"], save_every=n))["cx_count"]
+            chain.append({"dt": dt, "M": M, "n_steps": n, "cx": cx, "N_BLP": N,
+                          "N_exact_grid": N_ex, "error": abs(N - N_ex), **fit})
+    f_pm = _pareto_front([(r["cx"], r["error"]) for r in pm])
+    f_ch = _pareto_front([(r["cx"], r["error"]) for r in chain])
+    lo = max(f_pm[0][0], f_ch[0][0])
+    hi = min(f_pm[-1][0], f_ch[-1][0])
+    comparison = None
+    if hi > lo:
+        grid = np.exp(np.linspace(np.log(lo), np.log(hi), n_compare))
+
+        def front_error(front, cx):
+            # a Pareto front is a step function: the best error reachable with <= cx gates
+            errs = [e for c, e in front if c <= cx * (1 + 1e-12)]
+            return min(errs)
+
+        ratio = np.array([front_error(f_ch, c) / front_error(f_pm, c) for c in grid])
+        if np.all(ratio <= 0.5):
+            verdict = "WINNER: chain"
+        elif np.all(ratio >= 2.0):
+            verdict = "WINNER: pseudomode"
+        elif np.all((ratio > 0.5) & (ratio < 2.0)):
+            verdict = "PARITY"
+        else:
+            verdict = "CROSSOVER"
+        comparison = {"cx_grid": grid, "chain_over_pseudomode": ratio, "verdict": verdict,
+                      "cx_overlap": [float(lo), float(hi)]}
+    out = {"pseudomode": pm, "chain": chain, "pareto_pseudomode": f_pm, "pareto_chain": f_ch,
+           "comparison": comparison, "t_max": t_max, "params": pars,
+           "note": "M = 1 with theta_s = Omega dt, p_loss = 1 - exp(-kappa dt) is the pseudomode circuit."}
+    save_result("gate_count_study",
+                {"dts_pm": list(dts_pm), "chain_dts": list(chain_dts), "chain_Ms": list(chain_Ms),
+                 "t_max": t_max, "n_compare": n_compare}, out)
     return out
 
 

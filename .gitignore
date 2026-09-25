@@ -34,3 +34,6 @@ paper/
 Thumbs.db
 .vscode/
 .idea/
+
+# resumable-run checkpoints (not records)
+results/checkpoints/

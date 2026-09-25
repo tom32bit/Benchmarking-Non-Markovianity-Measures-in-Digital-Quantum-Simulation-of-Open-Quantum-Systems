@@ -37,3 +37,21 @@ def test_optimized_phase_diagram_parallel_equals_serial():
                                serial["signed_error_optimized"], atol=1e-12)
     np.testing.assert_allclose(parallel["signed_error_plus_minus"],
                                serial["signed_error_plus_minus"], atol=1e-12)
+
+
+def test_phase_diagram_resumes_from_an_interrupted_checkpoint():
+    """A run killed mid-way leaves a checkpoint (header, finished points, maybe a
+    cut line); the next run skips the finished points and gives the same result."""
+    from qmembench import experiments as E
+    run = E.phase9_truncation_phase_diagram_optimized
+    full = run(d_ref=3, d_check=2, n_workers=1, grid=(2, 2))
+    done = E.RESULTS_DIR / "checkpoints" / "phase9_optimized_2x2_d3_2_s0.1.jsonl.done"
+    lines = done.read_text(encoding="utf-8").splitlines()
+    assert lines[0].startswith('{"kind": "header"') and len(lines) == 5
+    partial = done.with_name(done.name[: -len(".done")])
+    partial.write_text("\n".join(lines[:3]) + '\n{"kind": "point", "ind', encoding="utf-8")
+    resumed = run(d_ref=3, d_check=2, n_workers=1, grid=(2, 2))
+    for key in ("signed_error_optimized", "signed_error_plus_minus", "reference_check_max_abs"):
+        np.testing.assert_allclose(np.asarray(resumed[key]), np.asarray(full[key]), atol=1e-12)
+    assert len(resumed["checkpoint_segments_commit_at_import"]) == 2
+    assert not partial.exists()
