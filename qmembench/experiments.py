@@ -1731,6 +1731,266 @@ def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.
 
 
 # ===========================================================================
+# Shot-noise dispersion of the simulator's sampling (found in T2.9)
+# ===========================================================================
+
+def aer_shot_dispersion_check(n_seeds: int = 30, shots: int = 4096, dt: float = 0.15,
+                              steps=(0, 10, 20, 30), scales=(0.0, 1.0, 2.0)) -> dict:
+    """Across-seed spread of the measured Bloch components of the Stage A shot
+    circuits, against the binomial spread 2 sqrt(p (1 - p) / shots) of i.i.d.
+    shots, for Aer's default method (the recorded runs) and for the
+    density-matrix method. p is the exact outcome probability."""
+    from qiskit_aer import AerSimulator
+    pair = ("+", "-")
+    omega, kappa = stageA_params(**STAGEA_NONMARKOV)
+    steps = list(steps)
+    build_args = {"dt": dt, "omega": omega, "kappa": kappa}
+    rows = []
+    for scale in scales:
+        nm = build_noise_model(scale=scale)
+        ex = _exact_measured_probabilities(omega, kappa, dt, steps, pair, scale)
+        sd_bin = 2.0 * np.sqrt(ex["p0"] * (1.0 - ex["p0"]) / shots)
+        circuits, index = [], []
+        for si, lbl in enumerate(pair):
+            for ki, k in enumerate(steps):
+                for bi, b in enumerate(BASES):
+                    circuits.append(qc_mod.stageA_shot_circuit(init=lbl, n_steps=k, basis=b, **build_args))
+                    index.append((si, ki, bi))
+        tqcs = qc_mod.transpile_for_noise(circuits, nm) if nm is not None else circuits
+        by_method = {}
+        for method in ("default", "density_matrix"):
+            comps = []
+            for sd in range(1, n_seeds + 1):
+                opts = {} if method == "default" else {"method": "density_matrix"}
+                sim = AerSimulator(noise_model=nm, seed_simulator=sd, **opts)
+                res = sim.run(tqcs, shots=shots).result()
+                c = np.zeros((len(pair), len(steps), 3))
+                for i, (si, ki, bi) in enumerate(index):
+                    cnt = res.get_counts(i)
+                    c[si, ki, bi] = (cnt.get("0", 0) - cnt.get("1", 0)) / shots
+                comps.append(c)
+            comps = np.array(comps)
+            ratio = comps.std(axis=0, ddof=1) / np.maximum(sd_bin, 1e-12)
+            informative = sd_bin > 1e-3                      # skip deterministic outcomes
+            by_method[method] = {"sd_ratio": ratio, "median_ratio_step0": float(np.median(ratio[:, 0][informative[:, 0]])),
+                                 "median_ratio_later_steps": float(np.median(ratio[:, 1:][informative[:, 1:]])),
+                                 "mean_minus_exact_over_sem": float(np.max(np.abs(
+                                     (comps.mean(axis=0) - (2 * ex["p0"] - 1)) /
+                                     np.maximum(sd_bin / np.sqrt(n_seeds), 1e-12))[informative]))}
+        rows.append({"noise_scale": scale, "steps": steps, "binomial_sd": sd_bin, **by_method})
+    out = {"rows": rows, "n_seeds": n_seeds, "shots": shots, "dt": dt, "pair": pair,
+           "note": ("ratio = across-seed SD of each measured Bloch component / binomial SD; "
+                    "about 1 for i.i.d. shots. Step 0 has no reset; later steps contain "
+                    "the damping block's reset.")}
+    save_result("aer_shot_dispersion_check",
+                {"n_seeds": n_seeds, "shots": shots, "dt": dt, "steps": steps,
+                 "scales": list(scales)}, out)
+    return out
+
+
+# ===========================================================================
+# Finite-shot estimator characterisation (T2.9, R11) and null floor (T2.10, R12)
+# ===========================================================================
+
+def _exact_measured_probabilities(omega: float, kappa: float, dt: float, step_list,
+                                  pair, scale: float) -> dict:
+    """Exact outcome probabilities of the Stage A shot circuits, and both truths.
+
+    p0[state, step, basis] = P(read 0) of stageA_shot_circuit, from the noisy
+    density matrix after the basis rotation (gate noise included) and the
+    symmetric readout error of build_noise_model. The state truth is the BLP
+    of the exact noisy states (no rotation, no readout); the measured truth is
+    the BLP of the Bloch vectors 2 p0 - 1, the infinite-shot limit of the raw
+    estimator. Also returns the exact calibration probabilities."""
+    from .noise import DEFAULT_PRO
+    nm = build_noise_model(scale=scale)
+    p_ro = min(scale * DEFAULT_PRO, 0.5) if scale > 0 else 0.0
+
+    def unmeasured(qc):
+        qc = qc.remove_final_measurements(inplace=False)
+        qc.save_density_matrix(qubits=[0], label="rho_m")
+        return qc
+
+    circuits, index = [], []
+    for si, lbl in enumerate(pair):
+        for ki, k in enumerate(step_list):
+            for bi, b in enumerate(BASES):
+                circuits.append(unmeasured(qc_mod.stageA_shot_circuit(
+                    init=lbl, n_steps=k, dt=dt, omega=omega, kappa=kappa, basis=b)))
+                index.append((si, ki, bi))
+    res = qc_mod.run_exact(circuits, noise_model=nm)
+    p0 = np.zeros((len(pair), len(step_list), 3))
+    for (si, ki, bi), r in zip(index, res):
+        q0 = min(max(float(np.real(r["rho_m"][0, 0])), 0.0), 1.0)   # rounding can leave [0, 1]
+        p0[si, ki, bi] = (1.0 - p_ro) * q0 + p_ro * (1.0 - q0)
+    cal = [unmeasured(c) for c in readout_calibration_circuits()]
+    q_cal = [min(max(float(np.real(r["rho_m"][0, 0])), 0.0), 1.0)
+             for r in qc_mod.run_exact(cal, noise_model=nm)]
+    p_cal0 = np.array([(1.0 - p_ro) * q + p_ro * (1.0 - q) for q in q_cal])
+    from .statistics import D_from_bloch, blp_along_last
+    exact = qc_mod.run_exact([qc_mod.stageA_exact_circuit(l, step_list[-1], dt, omega, kappa)
+                              for l in pair], noise_model=nm)
+    states = [[qc_mod.exact_states_from_labels(r, step_list[-1])[k] for k in step_list]
+              for r in exact]
+    return {"p0": p0, "p_cal0": p_cal0, "p_ro": p_ro,
+            "state_truth": blp_from_curve(trace_distance_curve(states[0], states[1])),
+            "measured_truth": float(blp_along_last(D_from_bloch(2.0 * p0 - 1.0)))}
+
+
+def _seed_estimators(n0, n0_cal, shots, n_boot, z_grid, rng) -> dict:
+    """All estimators of one seed's counts (see R11)."""
+    from .statistics import (D_from_bloch, a3_moments, blp_along_last, bloch_from_n0,
+                             jackknife_bias_blp, threshold_blp)
+    D_hat = D_from_bloch(bloch_from_n0(n0, shots))
+    raw = float(blp_along_last(D_hat))
+    boot = rng.binomial(shots, n0 / shots, size=(n_boot,) + n0.shape)
+    D_b = D_from_bloch(bloch_from_n0(boot, shots))
+    N_b = blp_along_last(D_b)
+    D_bar, se = D_b.mean(axis=0), D_b.std(axis=0)
+    thr_bar = threshold_blp(D_bar, se, z_grid)
+    thr_hat = threshold_blp(D_hat, se, z_grid)
+    # readout mitigation with the seed's own calibration (confusion_matrix convention)
+    M = np.array([[n0_cal[0] / shots, n0_cal[1] / shots],
+                  [1.0 - n0_cal[0] / shots, 1.0 - n0_cal[1] / shots]])
+    probs = np.stack([n0 / shots, 1.0 - n0 / shots], axis=-1)
+    corr = np.clip(np.einsum("ij,...j->...i", np.linalg.inv(M), probs), 0.0, None)
+    tot = corr.sum(axis=-1, keepdims=True)
+    corr = np.where(tot > 0, corr / np.where(tot > 0, tot, 1.0), 0.5)
+    mitigated = float(blp_along_last(D_from_bloch(corr[..., 0] - corr[..., 1])))
+    # z rules on the paper's estimator (threshold on D_bar)
+    n_inc = D_hat.size - 1
+    z_univ = float(np.sqrt(2.0 * np.log(n_inc)))
+    mu_hat = np.diff(D_bar)
+    s_hat = np.sqrt(se[:-1] ** 2 + se[1:] ** 2)
+    mse = []
+    for z in z_grid:
+        e1, e2 = a3_moments(mu_hat, s_hat, z)
+        mse.append(np.sum(e1 - np.maximum(mu_hat, 0.0)) ** 2 + np.sum(e2 - e1 ** 2))
+    z_plugin = float(z_grid[int(np.argmin(mse))])
+    return {"raw": raw, "thr_bar": thr_bar, "thr_hat": thr_hat,
+            "boot_bc": 2.0 * raw - float(N_b.mean()),
+            "jack_bc": raw - jackknife_bias_blp(n0, shots),
+            "mitigated": mitigated,
+            "thr_univ": float(threshold_blp(D_bar, se, z_univ)),
+            "thr_plugin": float(threshold_blp(D_bar, se, z_plugin)), "z_plugin": z_plugin,
+            "ci": (float(np.quantile(N_b, 0.025)), float(np.quantile(N_b, 0.975))),
+            "q95": float(np.quantile(N_b, 0.95)), "D_hat": D_hat}
+
+
+def _summary(values, state_truth, measured_truth) -> dict:
+    v = np.asarray(values, dtype=float)
+    return {"mean": float(v.mean()), "std": float(v.std(ddof=1)),
+            "sem": float(v.std(ddof=1) / np.sqrt(v.size)),
+            "bias_state": float(v.mean() - state_truth),
+            "bias_measured": float(v.mean() - measured_truth),
+            "rmse_state": float(np.sqrt(np.mean((v - state_truth) ** 2))),
+            "rmse_measured": float(np.sqrt(np.mean((v - measured_truth) ** 2)))}
+
+
+def estimator_characterization(n_seeds: int = 1000, shots: int = 4096, n_boot: int = 200,
+                               scales=(0.0, 0.5, 1.0, 2.0),
+                               grids=(("A", 0.15, 2), ("B", 0.3, 2)),
+                               t_max: float = 9.0, rng_seed: int = 20260925) -> dict:
+    """T2.9 (R11) and T2.10 (R12): the finite-shot estimators on the paper's two
+    grids, with counts drawn as Binomial(shots, p) from the exact outcome
+    probabilities of the measured circuits; the null-floor decision rules on
+    grid A with the Markovian Stage A control."""
+    from .statistics import D_from_bloch, a3_moments, blp_along_last, bloch_from_n0
+    z_grid = np.round(np.arange(0.0, 3.0 + 1e-9, 0.25), 2)
+    pair = ("+", "-")
+    omega, kappa = stageA_params(**STAGEA_NONMARKOV)
+    omega_c, kappa_c = stageA_params(**STAGEA_MARKOV)
+    rec_path = Path(__file__).resolve().parents[1] / "results" / "phase3_estimator_validation.json"
+    recorded = ({r["noise_scale"]: r for r in json.load(open(rec_path, encoding="utf-8"))["data"]["rows"]}
+                if rec_path.exists() else {})
+    out_grids = {}
+    for gi, (gname, dt, stride) in enumerate(grids):
+        step_list = list(range(0, int(round(t_max / dt)) + 1, stride))
+        rows = []
+        for si, scale in enumerate(scales):
+            ex = _exact_measured_probabilities(omega, kappa, dt, step_list, pair, scale)
+            rng = np.random.default_rng([rng_seed, gi, si, 0])
+            per = [_seed_estimators(rng.binomial(shots, ex["p0"]), rng.binomial(shots, ex["p_cal0"]),
+                                    shots, n_boot, z_grid, rng) for _ in range(n_seeds)]
+            st, mt = ex["state_truth"], ex["measured_truth"]
+            est = {k: _summary([q[k] for q in per], st, mt)
+                   for k in ("raw", "boot_bc", "jack_bc", "mitigated", "thr_univ", "thr_plugin")}
+            thr_bar = np.array([q["thr_bar"] for q in per])
+            thr_hat = np.array([q["thr_hat"] for q in per])
+            sweep = {name: [_summary(arr[:, i], st, mt) for i in range(len(z_grid))]
+                     for name, arr in (("threshold_Dbar", thr_bar), ("threshold_Dhat", thr_hat))}
+            # A3 against the simulated D_hat threshold (moments and truth versions)
+            X = np.diff(np.array([q["D_hat"] for q in per]), axis=1)
+            mu_j, s_j = X.mean(axis=0), X.std(axis=0, ddof=1)
+            mu_true = np.diff(D_from_bloch(2.0 * ex["p0"] - 1.0))
+            a3 = []
+            for i, z in enumerate(z_grid):
+                pred_m = float(np.sum(a3_moments(mu_j, s_j, z)[0]))
+                pred_t = float(np.sum(a3_moments(mu_true, s_j, z)[0]))
+                sim = sweep["threshold_Dhat"][i]
+                ok = abs(pred_m - sim["mean"]) <= 2 * sim["sem"] + 0.1 * abs(sim["bias_measured"])
+                a3.append({"z": float(z), "predicted_moments": pred_m, "predicted_truth": pred_t,
+                           "simulated": sim["mean"], "sem": sim["sem"], "pass": bool(ok)})
+            ci = np.array([q["ci"] for q in per])
+            cover_s = int(np.sum((ci[:, 0] <= st) & (st <= ci[:, 1])))
+            cover_m = int(np.sum((ci[:, 0] <= mt) & (mt <= ci[:, 1])))
+            row = {"noise_scale": scale, "state_truth": st, "measured_truth": mt,
+                   "p_readout": ex["p_ro"], "estimators": est, "z_grid": z_grid, "sweep": sweep,
+                   "a3": a3, "z_plugin_mean": float(np.mean([q["z_plugin"] for q in per])),
+                   "z_universal": float(np.sqrt(2.0 * np.log(len(step_list) - 1))),
+                   "ci_coverage_state": [cover_s / n_seeds, *_wilson_ci(cover_s, n_seeds)],
+                   "ci_coverage_measured": [cover_m / n_seeds, *_wilson_ci(cover_m, n_seeds)],
+                   "per_seed": {k: [q[k] for q in per] for k in
+                                ("raw", "boot_bc", "jack_bc", "mitigated", "thr_plugin")},
+                   "per_seed_threshold_Dbar_z1": thr_bar[:, int(np.argmin(abs(z_grid - 1.0)))]}
+            if gname == "A" and scale in recorded:
+                rec = recorded[scale]
+                row["state_truth_recorded"] = rec["true_noisy_N_BLP"]
+                checks = {}
+                for key, mine in (("raw", est["raw"]),
+                                  ("debiased_z1.0", sweep["threshold_Dbar"][int(np.argmin(abs(z_grid - 1.0)))])):
+                    sem_rec = rec[f"{key}_std"] / np.sqrt(rec["n_seeds"])
+                    diff = mine["mean"] - rec[f"{key}_mean"]
+                    checks[key] = {"recorded_mean": rec[f"{key}_mean"], "binomial_mean": mine["mean"],
+                                   "difference": diff,
+                                   "within_3_sigma": bool(abs(diff) <= 3 * np.hypot(sem_rec, mine["sem"]))}
+                row["aer_reproduction"] = checks
+                # T2.10: null floor on grid A, raw estimator, Markovian control
+                exc = _exact_measured_probabilities(omega_c, kappa_c, dt, step_list, pair, scale)
+                rc = np.random.default_rng([rng_seed, gi, si, 1])
+                ctrl_a = [_seed_estimators(rc.binomial(shots, exc["p0"]), rc.binomial(shots, exc["p_cal0"]),
+                                           shots, n_boot, z_grid, rc) for _ in range(n_seeds)]
+                ctrl_b = [_seed_estimators(rc.binomial(shots, exc["p0"]), rc.binomial(shots, exc["p_cal0"]),
+                                           shots, n_boot, z_grid, rc) for _ in range(n_seeds)]
+                a_raw = np.array([q["raw"] for q in ctrl_a])
+                b_raw = np.array([q["raw"] for q in ctrl_b])
+                b_q95 = np.array([q["q95"] for q in ctrl_b])
+                t_raw = np.array([q["raw"] for q in per])
+                t_thr = row["per_seed_threshold_Dbar_z1"]
+                a_thr = np.array([q["thr_bar"][int(np.argmin(abs(z_grid - 1.0)))] for q in ctrl_a])
+                row["null_floor"] = {
+                    "control_state_truth": exc["state_truth"],
+                    "control_measured_truth": exc["measured_truth"],
+                    "control_raw_mean": float(a_raw.mean()),
+                    "test_raw_bias_measured": est["raw"]["bias_measured"],
+                    "rule_P_raw": {"FP": float(np.mean(a_raw > b_raw)), "FN": float(np.mean(t_raw <= b_raw))},
+                    "rule_Q_raw_q95": {"FP": float(np.mean(a_raw > b_q95)),
+                                       "FN": float(np.mean(t_raw <= b_q95))},
+                    "paper_mixed_rule": {"FP": float(np.mean(a_thr > b_raw)),
+                                         "FN": float(np.mean(t_thr <= b_raw))}}
+            rows.append(row)
+        out_grids[gname] = {"dt": dt, "stride": stride, "blp_sampling": dt * stride,
+                            "step_list": step_list, "rows": rows}
+    out = {"grids": out_grids, "shots": shots, "n_seeds": n_seeds, "n_boot": n_boot,
+           "pair": pair, "t_max": t_max, "params": STAGEA_NONMARKOV, "control": STAGEA_MARKOV,
+           "sampling": "Binomial(shots, p) from exact outcome probabilities (R11)"}
+    save_result("estimator_characterization",
+                {"n_seeds": n_seeds, "shots": shots, "n_boot": n_boot, "scales": list(scales),
+                 "grids": [list(g) for g in grids], "rng_seed": rng_seed}, out)
+    return out
+
+
+# ===========================================================================
 # RHP: convergence in time step, regularisation and grid alignment (T2.7, R3)
 # ===========================================================================
 

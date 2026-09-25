@@ -81,3 +81,69 @@ def test_null_floor_positive_and_shrinks_with_shots():
     # more shots -> smaller bias floor (statistical, so average a few seeds
     # implicitly via the larger sample); check the expected ordering holds.
     assert null_floor(pc_hi, steps, ("+", "-")) <= null_floor(pc_lo, steps, ("+", "-"))
+
+
+def _random_pair_counts(rng, n_steps=6, shots=200):
+    n0 = rng.integers(0, shots + 1, size=(2, n_steps, 3))
+    pc = {lbl: {k: {b: {"0": int(n0[s, k, j]), "1": int(shots - n0[s, k, j])}
+                    for j, b in enumerate(("X", "Y", "Z"))} for k in range(n_steps)}
+          for s, lbl in enumerate(("+", "-"))}
+    return n0, pc
+
+
+def test_vectorised_raw_blp_equals_point_estimate():
+    from qmembench.statistics import (D_from_bloch, blp_along_last, blp_point_estimate,
+                                      bloch_from_n0)
+    rng = np.random.default_rng(3)
+    for _ in range(5):
+        n0, pc = _random_pair_counts(rng)
+        N, D = blp_point_estimate(pc, list(range(6)), ("+", "-"))
+        Dv = D_from_bloch(bloch_from_n0(n0, 200))
+        np.testing.assert_allclose(Dv, D, atol=1e-12)
+        assert float(blp_along_last(Dv)) == pytest.approx(N, abs=1e-12)
+
+
+def test_threshold_blp_matches_direct_sum():
+    from qmembench.statistics import threshold_blp
+    rng = np.random.default_rng(4)
+    D, se = rng.random(9), 0.05 * rng.random(9)
+    for z in (0.0, 0.5, 1.0, 2.0):
+        direct = sum(D[j + 1] - D[j] for j in range(8)
+                     if D[j + 1] - D[j] > z * np.sqrt(se[j] ** 2 + se[j + 1] ** 2)
+                     and D[j + 1] - D[j] > 0)
+        assert float(threshold_blp(D, se, z)) == pytest.approx(direct, abs=1e-12)
+    assert threshold_blp(D, se, np.array([0.0, 1.0])).shape == (2,)
+
+
+def test_jackknife_bias_matches_brute_force_deletion():
+    from qmembench.statistics import D_from_bloch, blp_along_last, jackknife_bias_blp
+    rng = np.random.default_rng(5)
+    shots = 30
+    n0, _ = _random_pair_counts(rng, n_steps=4, shots=shots)
+    N = float(blp_along_last(D_from_bloch((2.0 * n0 - shots) / shots)))
+    bias = 0.0
+    for idx in np.ndindex(n0.shape):
+        loo = []
+        for outcome in (0, 1):                       # delete each shot in turn
+            count = n0[idx] if outcome == 0 else shots - n0[idx]
+            for _ in range(int(count)):
+                m0 = n0.astype(float).copy()
+                if outcome == 0:
+                    m0[idx] -= 1
+                r = (2.0 * n0 - shots) / shots
+                r[idx] = (2.0 * m0[idx] - (shots - 1)) / (shots - 1)
+                loo.append(float(blp_along_last(D_from_bloch(r))))
+        bias += (shots - 1) * (np.mean(loo) - N)
+    assert jackknife_bias_blp(n0, shots) == pytest.approx(bias, rel=1e-10, abs=1e-12)
+
+
+def test_a3_moments_match_monte_carlo():
+    from qmembench.statistics import a3_moments
+    rng = np.random.default_rng(6)
+    for mu, s, z in ((0.1, 0.05, 1.0), (0.0, 0.03, 0.5), (-0.02, 0.04, 2.0)):
+        x = rng.normal(mu, s, 2_000_000)
+        keep = x > z * s
+        e1, e2 = a3_moments(mu, s, z)
+        for exact, samples in ((e1, x * keep), (e2, x ** 2 * keep)):
+            sem = samples.std() / np.sqrt(samples.size)      # Monte Carlo standard error
+            assert abs(float(exact) - samples.mean()) < 5 * sem

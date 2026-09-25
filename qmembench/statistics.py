@@ -116,3 +116,89 @@ def null_floor(control_counts, step_list, pair) -> float:
     """Apparent N_BLP of a Markovian control (true value 0) = the bias floor."""
     point, _ = blp_point_estimate(control_counts, step_list, pair)
     return point
+
+
+# ---------------------------------------------------------------------------
+# Vectorised estimators for the estimator characterisation (T2.9, rule R11)
+#
+# Counts are arrays of '0' outcomes, n0[..., state, step, basis], out of
+# ``shots``; the two states are the pair members and the bases are X, Y, Z.
+# ---------------------------------------------------------------------------
+
+def bloch_from_n0(n0, shots) -> np.ndarray:
+    """Bloch components (n0 - n1) / shots, last axis = (X, Y, Z)."""
+    return (2.0 * np.asarray(n0, dtype=float) - shots) / shots
+
+
+def project_to_ball(r: np.ndarray) -> np.ndarray:
+    """Radial projection of Bloch vectors (last axis) onto the unit ball, as
+    rho_from_bloch(project=True) does."""
+    n = np.linalg.norm(r, axis=-1, keepdims=True)
+    return np.where(n > 1.0, r / np.maximum(n, 1e-300), r)
+
+
+def D_from_bloch(r_pair: np.ndarray) -> np.ndarray:
+    """Trace distance of the pair, |r_a - r_b| / 2 after projection;
+    ``r_pair`` has axes [..., state(2), step, 3]."""
+    p = project_to_ball(r_pair)
+    return 0.5 * np.linalg.norm(p[..., 0, :, :] - p[..., 1, :, :], axis=-1)
+
+
+def blp_along_last(D: np.ndarray) -> np.ndarray:
+    """Sum of positive increments along the last axis."""
+    dD = np.diff(D, axis=-1)
+    return np.sum(np.where(dD > 0.0, dD, 0.0), axis=-1)
+
+
+def threshold_blp(D: np.ndarray, se: np.ndarray, z) -> np.ndarray:
+    """Eq. (16): sum of increments dD_j > z sqrt(se_j^2 + se_{j+1}^2).
+    ``z`` may be an array; the result has shape z.shape + D.shape[:-1]."""
+    z = np.asarray(z, dtype=float)
+    dD = np.diff(D, axis=-1)
+    step_se = np.maximum(np.sqrt(se[..., :-1] ** 2 + se[..., 1:] ** 2), 1e-12)
+    zz = z.reshape(z.shape + (1,) * dD.ndim)
+    keep = (dD > zz * step_se) & (dD > 0.0)
+    return np.sum(np.where(keep, dD, 0.0), axis=-1)
+
+
+def jackknife_bias_blp(n0: np.ndarray, shots: int) -> float:
+    """Stratified delete-one-shot jackknife bias of the raw BLP estimate.
+
+    Each circuit (state, step, basis) is its own sample of ``shots``
+    Bernoulli outcomes; deleting one '0' or one '1' shot changes only that
+    circuit's Bloch component. bias = sum_c (n - 1) (mean_{i in c} N_(-i) - N)."""
+    n0 = np.asarray(n0, dtype=float)
+    r = bloch_from_n0(n0, shots)
+    D = D_from_bloch(r)
+    N = float(blp_along_last(D))
+    n_states, n_steps, n_bases = n0.shape
+    bias = 0.0
+    for s in range(n_states):
+        for k in range(n_steps):
+            for b in range(n_bases):
+                c0 = n0[s, k, b]
+                c1 = shots - c0
+                mean_loo = 0.0
+                for count, new_n0 in ((c0, c0 - 1.0), (c1, c0)):
+                    if count <= 0:
+                        continue
+                    r2 = r[:, k, :].copy()
+                    r2[s, b] = (2.0 * new_n0 - (shots - 1)) / (shots - 1)
+                    Dk = D.copy()
+                    Dk[k] = D_from_bloch(r2[:, None, :])[0]
+                    mean_loo += (count / shots) * float(blp_along_last(Dk))
+                bias += (shots - 1) * (mean_loo - N)
+    return bias
+
+
+def a3_moments(mu, s, z):
+    """A3 (Gaussian increments X ~ N(mu, s^2)): E[X 1{X > z s}] and
+    E[X^2 1{X > z s}], elementwise; z broadcasts against mu, s."""
+    from scipy.stats import norm
+    mu, s = np.asarray(mu, dtype=float), np.maximum(np.asarray(s, dtype=float), 1e-300)
+    r = mu / s
+    arg = r - z
+    Phi, phi = norm.cdf(arg), norm.pdf(arg)
+    e1 = mu * Phi + s * phi
+    e2 = (mu ** 2 + s ** 2) * Phi + s * (mu + z * s) * phi
+    return e1, e2
