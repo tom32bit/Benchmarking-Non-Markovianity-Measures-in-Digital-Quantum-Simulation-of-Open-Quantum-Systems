@@ -1731,6 +1731,74 @@ def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.
 
 
 # ===========================================================================
+# Correlated detuning noise: exact ensemble averages (T2.11, rule R1)
+# ===========================================================================
+
+def correlated_noise_study(sigmas=(0.05, 0.1, 0.2), tau_cs=(0.1, 0.3, 1.0, 3.0, 10.0, 30.0, np.inf),
+                           dt: float = 0.05, t_max: float = 9.0, n_tel_ou: int = 20,
+                           n_tel_check: int = 40) -> dict:
+    """Pair-optimised BLP of Stage A (non-Markovian) and of the Markovian control
+    under telegraph and OU-like detuning noise, averaged exactly over the noise
+    (correlated_noise.evolve_dephased_average), at fixed stationary variance
+    and, separately, at fixed accumulated phase variance.
+
+    Numerical checks per configuration: the OU stand-in with n_tel_check
+    components, and the kick step halved (BLP kept on the same 0.05 grid)."""
+    from .correlated_noise import accumulated_phase_variance, evolve_dephased_average
+    n_steps = int(round(t_max / dt))
+    models = {"nonmarkovian": STAGEA_NONMARKOV, "markovian_control": STAGEA_MARKOV}
+
+    def blp(model, sigma, tau_c, n_tel, step=dt):
+        omega, kappa = stageA_params(**models[model])
+        n = int(round(t_max / step))
+        stride = int(round(dt / step))
+        states = {l: evolve_dephased_average(dm(l), n, step, omega, kappa, sigma, tau_c, n_tel)[::stride]
+                  for l in IC_INPUTS}
+        summ, _ = _pair_summary(states)
+        return {"optimized": summ["N_BLP_optimized"],
+                "plus_minus": summ["canonical_by_pair"]["+|-"], "n_opt": summ["n_opt"]}
+
+    def tag(t):
+        return "inf" if not np.isfinite(t) else f"{t:g}"
+
+    out = {"models": models, "dt": dt, "t_max": t_max, "n_tel_ou": n_tel_ou,
+           "sigmas": list(sigmas), "tau_cs": [tag(t) for t in tau_cs],
+           "correlation_function": "C(tau) = sigma^2 exp(-|tau|/tau_c)",
+           "spectral_density": "S(omega) = 2 sigma^2 tau_c / (1 + omega^2 tau_c^2)"}
+    for model in models:
+        noiseless = blp(model, 0.0, 1.0, 1)
+        fixed_var = []
+        for process, n_tel in (("telegraph", 1), ("ou", n_tel_ou)):
+            for sigma in sigmas:
+                for tau in tau_cs:
+                    v = blp(model, sigma, tau, n_tel)
+                    chk_dt = blp(model, sigma, tau, n_tel, step=dt / 2)
+                    entry = {"process": process, "sigma": sigma, "tau_c": tag(tau), **v,
+                             "dt_half_optimized": chk_dt["optimized"],
+                             "accumulated_phase_variance": accumulated_phase_variance(
+                                 sigma, tau, n_steps, dt)}
+                    if process == "ou":
+                        entry["n_tel_check_optimized"] = blp(model, sigma, tau, n_tel_check)["optimized"]
+                    fixed_var.append(entry)
+        # the paper's old convention: equal accumulated phase variance at t_max,
+        # set by the quasi-static value at each sigma
+        fixed_acc = []
+        for sigma in sigmas:
+            target = accumulated_phase_variance(sigma, np.inf, n_steps, dt)
+            for tau in tau_cs:
+                s_eff = sigma * np.sqrt(target / accumulated_phase_variance(sigma, tau, n_steps, dt))
+                v = blp(model, s_eff, tau, n_tel_ou)
+                fixed_acc.append({"process": "ou", "sigma_quasi_static": sigma, "tau_c": tag(tau),
+                                  "sigma_effective": float(s_eff), **v})
+        out[model] = {"noiseless": noiseless, "fixed_stationary_variance": fixed_var,
+                      "fixed_accumulated_variance": fixed_acc}
+    save_result("correlated_noise_study",
+                {"sigmas": list(sigmas), "tau_cs": [tag(t) for t in tau_cs], "dt": dt,
+                 "t_max": t_max, "n_tel_ou": n_tel_ou, "n_tel_check": n_tel_check}, out)
+    return out
+
+
+# ===========================================================================
 # Shot-noise dispersion of the simulator's sampling (found in T2.9)
 # ===========================================================================
 
