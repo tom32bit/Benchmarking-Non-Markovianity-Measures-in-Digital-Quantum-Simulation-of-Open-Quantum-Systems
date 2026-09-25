@@ -2331,6 +2331,64 @@ def gate_count_study(dts_pm=(0.45, 0.3, 0.225, 0.15, 0.1, 0.075, 0.05),
     return out
 
 
+def embedding_noise_leg(chain_params: dict, noise_scales=(0.5, 1.0, 2.0), n_seeds: int = 500,
+                        shots: int = 4096, n_boot: int = 200, dt: float = 0.1, stride: int = 2,
+                        t_max: float = 9.0, rng_seed: int = 20260927) -> dict:
+    """The pseudomode and a fitted chain under the depolarizing model, over many
+    i.i.d. seeds (exact-probability sampling), with the paper's raw and
+    threshold (z = 1) estimators and each embedding's exact noisy BLP.
+    ``chain_params``: M, theta_s, theta_hop, p_loss (fitted on the same grid)."""
+    pars = STAGEA_NONMARKOV
+    omega, kappa = stageA_params(**pars)
+    step_list = list(range(0, int(round(t_max / dt)) + 1, stride))
+    times = np.array(step_list) * dt
+    pair = ("+", "-")
+    ideal = blp_from_curve(np.abs(analytic_G(times, **pars)))
+    z_grid = np.array([1.0])
+    cp = chain_params
+    builders = {
+        "pseudomode": (lambda l, k, b: qc_mod.stageA_shot_circuit(l, k, dt, omega, kappa, b),
+                       lambda l, n: qc_mod.stageA_exact_circuit(l, n, dt, omega, kappa)),
+        "chain": (lambda l, k, b: col_mod.chain_collision_shot_circuit(
+                      l, k, cp["M"], cp["theta_s"], cp["theta_hop"], cp["p_loss"], b),
+                  lambda l, n: col_mod.chain_collision_exact_circuit(
+                      l, n, cp["M"], cp["theta_s"], cp["theta_hop"], cp["p_loss"]))}
+    rows = []
+    for si, scale in enumerate(noise_scales):
+        row = {"noise_scale": scale}
+        per_seed = {}
+        for ei, (name, (shot_b, exact_b)) in enumerate(builders.items()):
+            ex = _exact_probabilities_for(shot_b, exact_b, step_list, pair, scale)
+            rng = np.random.default_rng([rng_seed, si, ei])
+            per = [_seed_estimators(rng.binomial(shots, ex["p0"]), rng.binomial(shots, ex["p_cal0"]),
+                                    shots, n_boot, z_grid, rng) for _ in range(n_seeds)]
+            raw = np.array([q["raw"] for q in per])
+            thr = np.array([float(q["thr_bar"][0]) for q in per])
+            per_seed[name] = {"raw": raw, "thr": thr}
+            row[name] = {"state_truth": ex["state_truth"], "measured_truth": ex["measured_truth"],
+                         "retention": ex["state_truth"] / ideal,
+                         "raw": _summary(raw, ex["state_truth"], ex["measured_truth"]),
+                         "threshold_z1": _summary(thr, ex["state_truth"], ex["measured_truth"])}
+        for k in ("raw", "thr"):
+            dif = per_seed["pseudomode"][k] - per_seed["chain"][k]
+            row[f"difference_{k}"] = {"mean": float(dif.mean()),
+                                      "se": float(dif.std(ddof=1) / np.sqrt(dif.size))}
+        a, b = row["pseudomode"]["state_truth"], row["chain"]["state_truth"]
+        row["exact_difference_relative"] = float((a - b) / a) if a > 0 else float("nan")
+        rows.append(row)
+    cx = {"pseudomode": qc_mod.resource_counts(qc_mod.stageA_exact_circuit(
+              "+", step_list[-1], dt, omega, kappa, save_every=step_list[-1]))["cx_count"],
+          "chain": qc_mod.resource_counts(col_mod.chain_collision_exact_circuit(
+              "+", step_list[-1], cp["M"], cp["theta_s"], cp["theta_hop"], cp["p_loss"],
+              save_every=step_list[-1]))["cx_count"]}
+    out = {"rows": rows, "ideal_on_grid": ideal, "chain_params": cp, "cx": cx, "dt": dt,
+           "stride": stride, "t_max": t_max, "n_seeds": n_seeds, "shots": shots, "params": pars}
+    save_result("embedding_noise_leg", {"noise_scales": list(noise_scales), "n_seeds": n_seeds,
+                                        "shots": shots, "dt": dt, "stride": stride,
+                                        "chain_params": cp, "rng_seed": rng_seed}, out)
+    return out
+
+
 # ===========================================================================
 # Correlated detuning noise: exact ensemble averages (T2.11, rule R1)
 # ===========================================================================
@@ -2481,15 +2539,17 @@ def _noise_model(kind: str, scale: float):
     raise ValueError(kind)
 
 
-def _exact_measured_probabilities(omega: float, kappa: float, dt: float, step_list,
-                                  pair, scale: float, noise_kind: str = "depolarizing") -> dict:
-    """Exact outcome probabilities of the Stage A shot circuits, and both truths.
+def _exact_probabilities_for(shot_builder, exact_builder, step_list, pair, scale: float,
+                             noise_kind: str = "depolarizing") -> dict:
+    """Exact outcome probabilities of a family of measured circuits, and both truths.
 
-    p0[state, step, basis] = P(read 0) of stageA_shot_circuit, from the noisy
+    shot_builder(label, k, basis) returns the measured circuit after k steps;
+    exact_builder(label, n) returns the evolution with a density-matrix save
+    after every step. p0[state, step, basis] = P(read 0), from the noisy
     density matrix after the basis rotation (gate noise included) and the
-    symmetric readout error of build_noise_model. The state truth is the BLP
-    of the exact noisy states (no rotation, no readout); the measured truth is
-    the BLP of the Bloch vectors 2 p0 - 1, the infinite-shot limit of the raw
+    symmetric readout error of the models. The state truth is the BLP of the
+    exact noisy states (no rotation, no readout); the measured truth is the
+    BLP of the Bloch vectors 2 p0 - 1, the infinite-shot limit of the raw
     estimator. Also returns the exact calibration probabilities."""
     from .noise import DEFAULT_PRO
     nm = _noise_model(noise_kind, scale)
@@ -2504,8 +2564,7 @@ def _exact_measured_probabilities(omega: float, kappa: float, dt: float, step_li
     for si, lbl in enumerate(pair):
         for ki, k in enumerate(step_list):
             for bi, b in enumerate(BASES):
-                circuits.append(unmeasured(qc_mod.stageA_shot_circuit(
-                    init=lbl, n_steps=k, dt=dt, omega=omega, kappa=kappa, basis=b)))
+                circuits.append(unmeasured(shot_builder(lbl, k, b)))
                 index.append((si, ki, bi))
     res = qc_mod.run_exact(circuits, noise_model=nm)
     p0 = np.zeros((len(pair), len(step_list), 3))
@@ -2517,13 +2576,22 @@ def _exact_measured_probabilities(omega: float, kappa: float, dt: float, step_li
              for r in qc_mod.run_exact(cal, noise_model=nm)]
     p_cal0 = np.array([(1.0 - p_ro) * q + p_ro * (1.0 - q) for q in q_cal])
     from .statistics import D_from_bloch, blp_along_last
-    exact = qc_mod.run_exact([qc_mod.stageA_exact_circuit(l, step_list[-1], dt, omega, kappa)
-                              for l in pair], noise_model=nm)
+    exact = qc_mod.run_exact([exact_builder(l, step_list[-1]) for l in pair], noise_model=nm)
     states = [[qc_mod.exact_states_from_labels(r, step_list[-1])[k] for k in step_list]
               for r in exact]
     return {"p0": p0, "p_cal0": p_cal0, "p_ro": p_ro,
             "state_truth": blp_from_curve(trace_distance_curve(states[0], states[1])),
             "measured_truth": float(blp_along_last(D_from_bloch(2.0 * p0 - 1.0)))}
+
+
+def _exact_measured_probabilities(omega: float, kappa: float, dt: float, step_list,
+                                  pair, scale: float, noise_kind: str = "depolarizing") -> dict:
+    """_exact_probabilities_for the Stage A shot circuits."""
+    return _exact_probabilities_for(
+        lambda l, k, b: qc_mod.stageA_shot_circuit(init=l, n_steps=k, dt=dt, omega=omega,
+                                                   kappa=kappa, basis=b),
+        lambda l, n: qc_mod.stageA_exact_circuit(l, n, dt, omega, kappa),
+        step_list, pair, scale, noise_kind)
 
 
 def _seed_estimators(n0, n0_cal, shots, n_boot, z_grid, rng) -> dict:
