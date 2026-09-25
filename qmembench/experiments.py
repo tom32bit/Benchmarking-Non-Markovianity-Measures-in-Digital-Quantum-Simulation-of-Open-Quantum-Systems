@@ -1095,6 +1095,119 @@ def noise_model_mapping(scales=(0.5, 1.0, 2.0),
 
 
 # ===========================================================================
+# Zero-noise extrapolation over seeds, with the paper's estimators (T2.12)
+# ===========================================================================
+
+ZNE_LINEAR_WEIGHTS_135 = np.array([13.0 / 12.0, 1.0 / 3.0, -5.0 / 12.0])   # line through folds 1,3,5 at 0
+
+
+def zne_multiseed(noise_scales=(1.0, 2.0), n_seeds: int = 500, shots: int = 4096,
+                  n_boot: int = 200, dt: float = 0.1, stride: int = 2, t_max: float = 9.0,
+                  rng_seed: int = 20260926) -> dict:
+    """The paper's ZNE (CX folding 1, 3, 5; readout mitigation; linear
+    extrapolation) over many seeds. Counts are drawn from the exact outcome
+    probabilities of the folded circuits, which are simulated as folded (no
+    second transpile, so no pass can cancel the folds). Estimators: raw BLP of
+    the extrapolated curve, and the threshold rule (z = 1) on its bootstrap-mean
+    curve; for reference, the unfolded raw and readout-mitigated estimates."""
+    from qiskit_aer import AerSimulator
+    from .noise import DEFAULT_PRO
+    from .statistics import D_from_bloch, blp_along_last, threshold_blp
+    pars = STAGEA_NONMARKOV
+    omega, kappa = stageA_params(**pars)
+    step_list = list(range(0, int(round(t_max / dt)) + 1, stride))
+    times = np.array(step_list) * dt
+    pair = ("+", "-")
+    folds = (1, 3, 5)
+    ideal = blp_from_curve(np.abs(analytic_G(times, **pars)))
+    rows = []
+    for si, scale in enumerate(noise_scales):
+        nm = build_noise_model(scale=scale)
+        p_ro = min(scale * DEFAULT_PRO, 0.5)
+        base, index = [], []
+        for a, lbl in enumerate(pair):
+            for ki, k in enumerate(step_list):
+                for bi, b in enumerate(BASES):
+                    base.append(qc_mod.stageA_shot_circuit(lbl, k, dt, omega, kappa, b))
+                    index.append((a, ki, bi))
+        tbase = qc_mod.transpile_for_noise(base, nm)
+        sim = AerSimulator(method="density_matrix", noise_model=nm)
+        p0 = np.zeros((len(folds), len(pair), len(step_list), 3))
+        for fi, fs in enumerate(folds):
+            circs = []
+            for c in tbase:
+                f = fold_cx(c, fs).remove_final_measurements(inplace=False)
+                f.save_density_matrix(qubits=[0], label="rho_m")
+                circs.append(f)
+            res = sim.run(circs).result()
+            for i, (a, ki, bi) in enumerate(index):
+                q0 = min(max(float(np.real(np.asarray(res.data(i)["rho_m"])[0, 0])), 0.0), 1.0)
+                p0[fi, a, ki, bi] = (1.0 - p_ro) * q0 + p_ro * (1.0 - q0)
+        cal = []
+        for c in readout_calibration_circuits():
+            f = qc_mod.transpile_for_noise([c], nm)[0].remove_final_measurements(inplace=False)
+            f.save_density_matrix(qubits=[0], label="rho_m")
+            q0 = min(max(float(np.real(np.asarray(sim.run(f).result().data(0)["rho_m"])[0, 0])), 0.0), 1.0)
+            cal.append((1.0 - p_ro) * q0 + p_ro * (1.0 - q0))
+        cal = np.array(cal)
+        exact = qc_mod.run_exact([qc_mod.stageA_exact_circuit(l, step_list[-1], dt, omega, kappa)
+                                  for l in pair], noise_model=nm)
+        st = [[qc_mod.exact_states_from_labels(r, step_list[-1])[k] for k in step_list] for r in exact]
+        state_truth = blp_from_curve(trace_distance_curve(st[0], st[1]))
+
+        def mitigated(n0, n0_cal):
+            M = np.array([[n0_cal[0] / shots, n0_cal[1] / shots],
+                          [1.0 - n0_cal[0] / shots, 1.0 - n0_cal[1] / shots]])
+            probs = np.stack([n0 / shots, 1.0 - n0 / shots], axis=-1)
+            corr = np.clip(np.einsum("ij,...j->...i", np.linalg.inv(M), probs), 0.0, None)
+            tot = corr.sum(axis=-1, keepdims=True)
+            corr = np.where(tot > 0, corr / np.where(tot > 0, tot, 1.0), 0.5)
+            return corr[..., 0] - corr[..., 1]                       # <sigma> per element
+
+        def zne_bloch(n0_folds, n0_cal):
+            e = mitigated(n0_folds, n0_cal)                          # [..., fold, pair, step, basis]
+            return np.einsum("f,...fpsb->...psb", ZNE_LINEAR_WEIGHTS_135, e)
+
+        rng = np.random.default_rng([rng_seed, si])
+        rec = {k: [] for k in ("zne_raw", "zne_threshold_z1", "unfolded_raw", "unfolded_mitigated")}
+        for _ in range(n_seeds):
+            n0 = rng.binomial(shots, p0)
+            n0_cal = rng.binomial(shots, cal)
+            D = D_from_bloch(zne_bloch(n0, n0_cal))
+            rec["zne_raw"].append(float(blp_along_last(D)))
+            boot = rng.binomial(shots, n0 / shots, size=(n_boot,) + n0.shape)
+            D_b = D_from_bloch(zne_bloch(boot, n0_cal))
+            rec["zne_threshold_z1"].append(float(threshold_blp(D_b.mean(axis=0), D_b.std(axis=0), 1.0)))
+            rec["unfolded_raw"].append(float(blp_along_last(D_from_bloch((2.0 * n0[0] - shots) / shots))))
+            rec["unfolded_mitigated"].append(float(blp_along_last(D_from_bloch(mitigated(n0[0], n0_cal)))))
+        summ = {}
+        for k, v in rec.items():
+            v = np.asarray(v)
+            summ[k] = {"mean": float(v.mean()), "std": float(v.std(ddof=1)),
+                       "sem": float(v.std(ddof=1) / np.sqrt(v.size)),
+                       "bias_vs_state_truth": float(v.mean() - state_truth),
+                       "bias_vs_ideal": float(v.mean() - ideal),
+                       "rmse_vs_ideal": float(np.sqrt(np.mean((v - ideal) ** 2)))}
+        # infinite-shot limits: the full estimator (exact calibration and mitigation),
+        # and the extrapolation of the unmitigated probabilities
+        lim_mit = float(blp_along_last(D_from_bloch(zne_bloch(shots * p0, shots * cal))))
+        lim_raw = float(blp_along_last(D_from_bloch(np.einsum(
+            "f,fpsb->psb", ZNE_LINEAR_WEIGHTS_135, 2.0 * p0 - 1.0))))
+        rows.append({"noise_scale": scale, "state_truth": state_truth, "ideal_on_grid": ideal,
+                     "zne_infinite_shot_limit": lim_mit, "zne_limit_without_mitigation": lim_raw,
+                     "estimators": summ, "per_seed_zne_raw": rec["zne_raw"]})
+    out = {"rows": rows, "folds": folds, "extrapolation": "linear, weights (13/12, 1/3, -5/12)",
+           "dt": dt, "stride": stride, "t_max": t_max, "n_seeds": n_seeds, "shots": shots,
+           "n_boot": n_boot, "params": pars,
+           "note": ("zne_infinite_shot_limit is the estimator's limit with exact outcome and "
+                    "calibration probabilities; the ideal is the closed-form |G| on the grid.")}
+    save_result("zne_multiseed", {"noise_scales": list(noise_scales), "n_seeds": n_seeds,
+                                  "shots": shots, "n_boot": n_boot, "dt": dt, "stride": stride,
+                                  "rng_seed": rng_seed}, out)
+    return out
+
+
+# ===========================================================================
 # Finite-T circuit error budget against its matched truncation (T2.6)
 # ===========================================================================
 

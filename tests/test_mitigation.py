@@ -53,3 +53,14 @@ def test_mitigated_expectation_matches_manual():
     counts = {"0": 800, "1": 200}
     val = mitigated_expectation(counts, M)
     assert -1.0 <= val <= 1.0
+
+
+def test_linear_zne_weights_equal_richardson_order_one():
+    import numpy as np
+    from qmembench.experiments import ZNE_LINEAR_WEIGHTS_135
+    from qmembench.mitigation import richardson_extrapolate
+    rng = np.random.default_rng(0)
+    for _ in range(5):
+        y = rng.normal(size=3)
+        assert float(ZNE_LINEAR_WEIGHTS_135 @ y) == pytest.approx(
+            richardson_extrapolate(np.array([1, 3, 5]), y, order=1), abs=1e-12)
