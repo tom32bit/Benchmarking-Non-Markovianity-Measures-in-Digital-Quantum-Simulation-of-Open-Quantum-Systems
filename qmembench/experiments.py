@@ -1677,22 +1677,25 @@ def dimer_convergence_and_memory(d_max: int = 8, trotter_dts=(0.05, 0.025, 0.012
     return out
 
 
-def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.0) -> dict:
+def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.0,
+                          params=None, record: str | None = None) -> dict:
     """Fock convergence of the pair-optimised BLP at a fine sampling (B-G3:
-    Fock dimension and time resolution together). ``family``: "finite_T"
-    (Table 1 points), "spin_boson" (Table 2 points) or "dimer" (Sec. 8)."""
+    Fock dimension and time resolution together), with the value at twice
+    the sampling for the time check at each d. ``family``: "finite_T"
+    (Table 1 points), "spin_boson" (Table 2 points) or "dimer" (Sec. 8);
+    ``params`` overrides the family's points and ``record`` the record name."""
     from .reference import dimer_qutip_excitonic_states
     n = int(round(t_max / sampling))
     times = np.linspace(0.0, n * sampling, n + 1)
     dims = sorted(dims)
     if family == "finite_T":
-        params = [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5]
+        default_params = [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5]
 
         def evolver(p, d):
             return lambda r0, t: stageA_qutip_states_finiteT(
                 r0, t, **STAGEA_NONMARKOV, n_th=p, n_fock=d, options=TIGHT_SOLVER_OPTIONS)
     elif family == "spin_boson":
-        params = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7]
+        default_params = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7]
         proto = [(1.0, 0.4), (1.6, 0.8)]
 
         def evolver(p, d):
@@ -1700,7 +1703,7 @@ def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.
             return lambda r0, t: spin_boson_qutip_states(
                 r0, t, 1.0, 0.0, modes, n_fock=d, options=TIGHT_SOLVER_OPTIONS)
     elif family == "dimer":
-        params = [0.25]                    # the site coupling g of Sec. 8
+        default_params = [0.25]            # the site coupling g of Sec. 8
 
         def evolver(p, d):
             site_modes = [(0.8, p, 0.3), (0.8, p, 0.3)]
@@ -1708,14 +1711,20 @@ def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.
                 r0, t, 0.5, -0.5, 1.0, site_modes, n_fock=d, options=TIGHT_SOLVER_OPTIONS)
     else:
         raise ValueError(f"unknown family {family!r}")
+    if params is None:
+        params = default_params
     rows = []
     for p in params:
-        vals = {d: _pair_summary(_ic_states(evolver(p, d), times))[0]["N_BLP_optimized"]
-                for d in dims}
+        vals, vals2 = {}, {}
+        for d in dims:
+            st = _ic_states(evolver(p, d), times)
+            vals[d] = _pair_summary(st)[0]["N_BLP_optimized"]
+            vals2[d] = _pair_summary({l: v[::2] for l, v in st.items()})[0]["N_BLP_optimized"]
         rows.append({"param": p, "N_BLP_optimized": {str(d): v for d, v in vals.items()},
+                     "N_BLP_optimized_at_2x_sampling": {str(d): v for d, v in vals2.items()},
                      "eps_NM_to_top": {str(d): abs(v - vals[dims[-1]]) for d, v in vals.items()}})
     out = {"family": family, "dims": dims, "sampling": sampling, "t_max": t_max, "rows": rows}
-    save_result(f"joint_fock_time_{family}",
+    save_result(record or f"joint_fock_time_{family}",
                 {"family": family, "dims": dims, "sampling": sampling, "t_max": t_max,
                  "solver_options": TIGHT_SOLVER_OPTIONS}, out)
     return out
