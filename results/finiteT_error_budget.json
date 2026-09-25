@@ -1,0 +1,315 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-09-25T16:16:42.782633+00:00",
+  "qmembench_version": "0.1.0",
+  "git_commit": "f50eff6fd6c4a0588866832761c0319a428e4853+dirty",
+  "git_commit_at_import": "f50eff6fd6c4a0588866832761c0319a428e4853",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "scipy": "1.15.2",
+   "qiskit": "0.46.3",
+   "qiskit_aer": "0.13.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "n_ths": [
+    0.0,
+    0.1,
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    1.5
+   ],
+   "dts": [
+    0.1,
+    0.05,
+    0.025,
+    0.0125
+   ],
+   "t_max": 10.0,
+   "solver_options": {
+    "atol": 1e-12,
+    "rtol": 1e-10
+   }
+  }
+ },
+ "data": {
+  "rows": [
+   {
+    "n_th": 0.0,
+    "per_dt": [
+     {
+      "dt": 0.1,
+      "trajectory_trace_distance": 0.0025019968919965385,
+      "trajectory_elementwise": 0.002501996891997038,
+      "N_opt_circuit": 0.4824916387089485,
+      "N_opt_reference": 0.48459361480374985,
+      "blp_error": 0.002101976094801339
+     },
+     {
+      "dt": 0.05,
+      "trajectory_trace_distance": 0.0006254286052856106,
+      "trajectory_elementwise": 0.0006254286052866376,
+      "N_opt_circuit": 0.5247317813071789,
+      "N_opt_reference": 0.5239671792046346,
+      "blp_error": 0.000764602102544254
+     },
+     {
+      "dt": 0.025,
+      "trajectory_trace_distance": 0.00015635269686881115,
+      "trajectory_elementwise": 0.00015635269686931075,
+      "N_opt_circuit": 0.5242105385147035,
+      "N_opt_reference": 0.5239880664215812,
+      "blp_error": 0.00022247209312220573
+     },
+     {
+      "dt": 0.0125,
+      "trajectory_trace_distance": 3.908778757144571e-05,
+      "trajectory_elementwise": 3.908778757155673e-05,
+      "N_opt_circuit": 0.5333445515862547,
+      "N_opt_reference": 0.533348177434631,
+      "blp_error": 3.6258483763207394e-06
+     }
+    ]
+   },
+   {
+    "n_th": 0.1,
+    "per_dt": [
+     {
+      "dt": 0.1,
+      "trajectory_trace_distance": 0.009468620296165936,
+      "trajectory_elementwise": 0.009468620296175012,
+      "N_opt_circuit": 0.3464812875289524,
+      "N_opt_reference": 0.3442241262913786,
+      "blp_error": 0.0022571612375738015
+     },
+     {
+      "dt": 0.05,
+      "trajectory_trace_distance": 0.004659229241772457,
+      "trajectory_elementwise": 0.004659229241789853,
+      "N_opt_circuit": 0.3671769892070523,
+      "N_opt_reference": 0.36794276042266233,
+      "blp_error": 0.000765771215610056
+     },
+     {
+      "dt": 0.025,
+      "trajectory_trace_distance": 0.0023106838845831437,
+      "trajectory_elementwise": 0.0023106838846710387,
+      "N_opt_circuit": 0.36839879717602325,
+      "N_opt_reference": 0.3684179339087175,
+      "blp_error": 1.91367326942693e-05
+     },
+     {
+      "dt": 0.0125,
+      "trajectory_trace_distance": 0.0011505877388120894,
+      "trajectory_elementwise": 0.0011505877388399977,
+      "N_opt_circuit": 0.37677536931852346,
+      "N_opt_reference": 0.37675364479098405,
+      "blp_error": 2.1724527539401794e-05
+     }
+    ]
+   },
+   {
+    "n_th": 0.25,
+    "per_dt": [
+     {
+      "dt": 0.1,
+      "trajectory_trace_distance": 0.021504646138075123,
+      "trajectory_elementwise": 0.021504646138078454,
+      "N_opt_circuit": 0.21083115475144734,
+      "N_opt_reference": 0.2121973950209633,
+      "blp_error": 0.001366240269515956
+     },
+     {
+      "dt": 0.05,
+      "trajectory_trace_distance": 0.010587466538415538,
+      "trajectory_elementwise": 0.010587466538416801,
+      "N_opt_circuit": 0.21517199517816715,
+      "N_opt_reference": 0.21582892854562288,
+      "blp_error": 0.0006569333674557309
+     },
+     {
+      "dt": 0.025,
+      "trajectory_trace_distance": 0.005251386052657264,
+      "trajectory_elementwise": 0.005251386052683105,
+      "N_opt_circuit": 0.21994497922561368,
+      "N_opt_reference": 0.21980903870984728,
+      "blp_error": 0.00013594051576640287
+     },
+     {
+      "dt": 0.0125,
+      "trajectory_trace_distance": 0.002614972006260846,
+      "trajectory_elementwise": 0.0026149720062619286,
+      "N_opt_circuit": 0.22282973156518154,
+      "N_opt_reference": 0.2228498670324643,
+      "blp_error": 2.0135467282744735e-05
+     }
+    ]
+   },
+   {
+    "n_th": 0.5,
+    "per_dt": [
+     {
+      "dt": 0.1,
+      "trajectory_trace_distance": 0.03865140677183487,
+      "trajectory_elementwise": 0.03865140677184242,
+      "N_opt_circuit": 0.07512717536288765,
+      "N_opt_reference": 0.07214331227407193,
+      "blp_error": 0.002983863088815722
+     },
+     {
+      "dt": 0.05,
+      "trajectory_trace_distance": 0.01905046678268718,
+      "trajectory_elementwise": 0.019050466782701947,
+      "N_opt_circuit": 0.08070313177724743,
+      "N_opt_reference": 0.0810401656143685,
+      "blp_error": 0.0003370338371210674
+     },
+     {
+      "dt": 0.025,
+      "trajectory_trace_distance": 0.009451640141428325,
+      "trajectory_elementwise": 0.009451640141449336,
+      "N_opt_circuit": 0.08099309417228288,
+      "N_opt_reference": 0.08108407096285182,
+      "blp_error": 9.097679056893626e-05
+     },
+     {
+      "dt": 0.0125,
+      "trajectory_trace_distance": 0.004706846876779747,
+      "trajectory_elementwise": 0.004706846876889159,
+      "N_opt_circuit": 0.08220175247678708,
+      "N_opt_reference": 0.08215956548391457,
+      "blp_error": 4.2186992872519924e-05
+     }
+    ]
+   },
+   {
+    "n_th": 0.75,
+    "per_dt": [
+     {
+      "dt": 0.1,
+      "trajectory_trace_distance": 0.05400985929336488,
+      "trajectory_elementwise": 0.05400985929337221,
+      "N_opt_circuit": 0.015400588767539298,
+      "N_opt_reference": 0.015362325032937146,
+      "blp_error": 3.8263734602151864e-05
+     },
+     {
+      "dt": 0.05,
+      "trajectory_trace_distance": 0.026658089819805997,
+      "trajectory_elementwise": 0.02665808981982498,
+      "N_opt_circuit": 0.017250418476333036,
+      "N_opt_reference": 0.016706462364540323,
+      "blp_error": 0.0005439561117927122
+     },
+     {
+      "dt": 0.025,
+      "trajectory_trace_distance": 0.013230741051274605,
+      "trajectory_elementwise": 0.01323074105132338,
+      "N_opt_circuit": 0.016852129449345797,
+      "N_opt_reference": 0.016917987893561467,
+      "blp_error": 6.585844421566969e-05
+     },
+     {
+      "dt": 0.0125,
+      "trajectory_trace_distance": 0.006589392282418616,
+      "trajectory_elementwise": 0.0065893922824821205,
+      "N_opt_circuit": 0.01756153047193011,
+      "N_opt_reference": 0.01752900004289657,
+      "blp_error": 3.253042903353723e-05
+     }
+    ]
+   },
+   {
+    "n_th": 1.0,
+    "per_dt": [
+     {
+      "dt": 0.1,
+      "trajectory_trace_distance": 0.06842626912081748,
+      "trajectory_elementwise": 0.06842625663793289,
+      "N_opt_circuit": 0.00010623628157139251,
+      "N_opt_reference": 6.656282189804821e-05,
+      "blp_error": 3.9673459673344295e-05
+     },
+     {
+      "dt": 0.05,
+      "trajectory_trace_distance": 0.0338320689417857,
+      "trajectory_elementwise": 0.03383206894180302,
+      "N_opt_circuit": 8.114526084049395e-05,
+      "N_opt_reference": 7.726875911798944e-05,
+      "blp_error": 3.876501722504513e-06
+     },
+     {
+      "dt": 0.025,
+      "trajectory_trace_distance": 0.01679852827822273,
+      "trajectory_elementwise": 0.016798528278236968,
+      "N_opt_circuit": 8.242198728831923e-05,
+      "N_opt_reference": 7.728999042944779e-05,
+      "blp_error": 5.131996858871439e-06
+     },
+     {
+      "dt": 0.0125,
+      "trajectory_trace_distance": 0.008367182198165762,
+      "trajectory_elementwise": 0.00836718219820648,
+      "N_opt_circuit": 8.062417247904439e-05,
+      "N_opt_reference": 7.996354090715284e-05,
+      "blp_error": 6.606315718915432e-07
+     }
+    ]
+   },
+   {
+    "n_th": 1.5,
+    "per_dt": [
+     {
+      "dt": 0.1,
+      "trajectory_trace_distance": 0.0956653487015671,
+      "trajectory_elementwise": 0.09566534870157017,
+      "N_opt_circuit": 0.0,
+      "N_opt_reference": 0.0,
+      "blp_error": 0.0
+     },
+     {
+      "dt": 0.05,
+      "trajectory_trace_distance": 0.04750678891792534,
+      "trajectory_elementwise": 0.047506788917948684,
+      "N_opt_circuit": 0.0,
+      "N_opt_reference": 0.0,
+      "blp_error": 0.0
+     },
+     {
+      "dt": 0.025,
+      "trajectory_trace_distance": 0.023614288416421603,
+      "trajectory_elementwise": 0.02361428841647606,
+      "N_opt_circuit": 0.0,
+      "N_opt_reference": 0.0,
+      "blp_error": 0.0
+     },
+     {
+      "dt": 0.0125,
+      "trajectory_trace_distance": 0.01176527046299014,
+      "trajectory_elementwise": 0.011765270463001687,
+      "N_opt_circuit": 0.0,
+      "N_opt_reference": 0.0,
+      "blp_error": 0.0
+     }
+    ]
+   }
+  ],
+  "dts": [
+   0.1,
+   0.05,
+   0.025,
+   0.0125
+  ],
+  "t_max": 10.0,
+  "params": {
+   "gamma0": 5.0,
+   "lam": 1.0
+  },
+  "reference": "QuTiP n_fock = 2 (the circuit's model), TIGHT_SOLVER_OPTIONS"
+ }
+}

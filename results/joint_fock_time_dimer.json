@@ -1,0 +1,62 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-09-25T13:58:39.806049+00:00",
+  "qmembench_version": "0.1.0",
+  "git_commit": "dde35adf4c2b4885345937546f514b06b89d7c94+dirty",
+  "git_commit_at_import": "dde35adf4c2b4885345937546f514b06b89d7c94+dirty",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "scipy": "1.15.2",
+   "qiskit": "0.46.3",
+   "qiskit_aer": "0.13.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "family": "dimer",
+   "dims": [
+    6,
+    7,
+    8
+   ],
+   "sampling": 0.00078125,
+   "t_max": 10.0,
+   "solver_options": {
+    "atol": 1e-12,
+    "rtol": 1e-10
+   }
+  }
+ },
+ "data": {
+  "family": "dimer",
+  "dims": [
+   6,
+   7,
+   8
+  ],
+  "sampling": 0.00078125,
+  "t_max": 10.0,
+  "rows": [
+   {
+    "param": 0.25,
+    "N_BLP_optimized": {
+     "6": 0.13021733324287055,
+     "7": 0.13021638923861523,
+     "8": 0.13021643826988305
+    },
+    "N_BLP_optimized_at_2x_sampling": {
+     "6": 0.13021716035899233,
+     "7": 0.1302162184804554,
+     "8": 0.13021626769026207
+    },
+    "eps_NM_to_top": {
+     "6": 8.949729874974111e-07,
+     "7": 4.903126782362932e-08,
+     "8": 0.0
+    }
+   }
+  ]
+ }
+}

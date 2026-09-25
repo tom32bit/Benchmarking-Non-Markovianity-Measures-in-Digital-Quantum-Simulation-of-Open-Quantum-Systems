@@ -1,0 +1,141 @@
+{
+ "provenance": {
+  "timestamp_utc": "2026-09-25T16:20:20.777978+00:00",
+  "qmembench_version": "0.1.0",
+  "git_commit": "5e875a5f13cf6bb71e517ae1bb9e96f060bb7c11",
+  "git_commit_at_import": "5e875a5f13cf6bb71e517ae1bb9e96f060bb7c11",
+  "python": "3.12.6",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "versions": {
+   "numpy": "1.26.4",
+   "scipy": "1.15.2",
+   "qiskit": "0.46.3",
+   "qiskit_aer": "0.13.3",
+   "qutip": "5.3.0"
+  },
+  "seed": null,
+  "params": {
+   "scales": [
+    0.5,
+    1.0,
+    2.0
+   ],
+   "backends": [
+    "FakeManilaV2",
+    "FakeKolkataV2",
+    "FakeWashingtonV2",
+    "FakeSherbrooke"
+   ]
+  }
+ },
+ "data": {
+  "model": [
+   {
+    "scale": 0.5,
+    "p1_effective": 0.00015,
+    "p2_effective": 0.0035,
+    "p_readout_effective": 0.0075,
+    "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout",
+    "avg_error_1q": 7.499999999993623e-05,
+    "avg_error_2q": 0.0026249999999998774,
+    "readout_error": 0.0075
+   },
+   {
+    "scale": 1.0,
+    "p1_effective": 0.0003,
+    "p2_effective": 0.007,
+    "p_readout_effective": 0.015,
+    "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout",
+    "avg_error_1q": 0.00014999999999998348,
+    "avg_error_2q": 0.005249999999999977,
+    "readout_error": 0.015
+   },
+   {
+    "scale": 2.0,
+    "p1_effective": 0.0006,
+    "p2_effective": 0.014,
+    "p_readout_effective": 0.03,
+    "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout",
+    "avg_error_1q": 0.00029999999999985594,
+    "avg_error_2q": 0.010500000000000065,
+    "readout_error": 0.03
+   }
+  ],
+  "devices": [
+   {
+    "backend": "FakeManilaV2",
+    "n_qubits": 5,
+    "two_qubit_gate": "cx",
+    "median_error_sx": 0.00045948742715562995,
+    "median_error_2q": 0.010087519789438046,
+    "median_readout_error": 0.023600000000000065,
+    "median_duration_sx_s": 3.5555555555555554e-08,
+    "median_duration_2q_s": 3.4488888888888887e-07,
+    "median_T1_s": 0.00010918719287058488,
+    "median_T2_s": 3.722985261736209e-05,
+    "equivalent_scale": {
+     "1q": 3.0632495143712037,
+     "2q": 1.9214323408453504,
+     "readout": 1.5733333333333377
+    }
+   },
+   {
+    "backend": "FakeKolkataV2",
+    "n_qubits": 27,
+    "two_qubit_gate": "cx",
+    "median_error_sx": 0.00019798931961037083,
+    "median_error_2q": 0.007542471410836901,
+    "median_readout_error": 0.009600000000000053,
+    "median_duration_sx_s": 3.5555555555555554e-08,
+    "median_duration_2q_s": 3.804444444444444e-07,
+    "median_T1_s": 0.00011148198580190842,
+    "median_T2_s": 8.26760048552031e-05,
+    "equivalent_scale": {
+     "1q": 1.3199287974026177,
+     "2q": 1.436661221111797,
+     "readout": 0.6400000000000036
+    }
+   },
+   {
+    "backend": "FakeWashingtonV2",
+    "n_qubits": 127,
+    "two_qubit_gate": "cx",
+    "median_error_sx": 0.0002811181702834337,
+    "median_error_2q": 0.011459520267936146,
+    "median_readout_error": 0.014699999999999935,
+    "median_duration_sx_s": 3.5555555555555554e-08,
+    "median_duration_2q_s": 4.551111111111111e-07,
+    "median_T1_s": 9.86340242740176e-05,
+    "median_T2_s": 8.975397339293047e-05,
+    "equivalent_scale": {
+     "1q": 1.8741211352230978,
+     "2q": 2.1827657653211805,
+     "readout": 0.9799999999999958
+    }
+   },
+   {
+    "backend": "FakeSherbrooke",
+    "n_qubits": 127,
+    "two_qubit_gate": "ecr",
+    "median_error_sx": 0.0002177461017445316,
+    "median_error_2q": 0.0073761099989348156,
+    "median_readout_error": 0.011900000000000022,
+    "median_duration_sx_s": 5.6888888888888887e-08,
+    "median_duration_2q_s": 5.333333333333332e-07,
+    "median_T1_s": 0.00030393196405379937,
+    "median_T2_s": 0.00016204692781630783,
+    "equivalent_scale": {
+     "1q": 1.4516406782970372,
+     "2q": 1.4049733331304473,
+     "readout": 0.7933333333333348
+    }
+   }
+  ],
+  "defaults": {
+   "p1": 0.0003,
+   "p2": 0.007,
+   "p_readout": 0.015
+  },
+  "note": "Average gate error = 1 - average gate fidelity of the Aer error object. Device values are the medians of Qiskit's calibration snapshots (qiskit.providers.fake_provider, Qiskit 0.46), over qubits or qubit pairs."
+ }
+}
