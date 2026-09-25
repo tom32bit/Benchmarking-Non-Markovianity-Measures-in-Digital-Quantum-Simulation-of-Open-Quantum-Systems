@@ -2349,8 +2349,27 @@ def aer_shot_dispersion_check(n_seeds: int = 30, shots: int = 4096, dt: float = 
 # Finite-shot estimator characterisation (T2.9, R11) and null floor (T2.10, R12)
 # ===========================================================================
 
+def _noise_model(kind: str, scale: float):
+    """The depolarizing model of build_noise_model, or pure thermal relaxation
+    with the FakeKolkataV2 median T1, T2 and gate durations (T2.12)."""
+    if kind == "depolarizing":
+        return build_noise_model(scale=scale)
+    if kind == "thermal_relaxation":
+        from qiskit.providers import fake_provider as fp
+        from .noise import build_thermal_relaxation_model
+        b = fp.FakeKolkataV2()
+        t = b.target
+        props = [b.qubit_properties(q) for q in range(b.num_qubits)]
+        med = lambda g, a: float(np.median([getattr(v, a) for v in t[g].values() if v is not None]))
+        return build_thermal_relaxation_model(
+            scale, float(np.median([q.t1 for q in props if q.t1])),
+            float(np.median([q.t2 for q in props if q.t2])),
+            med("sx", "duration"), med("cx", "duration"))
+    raise ValueError(kind)
+
+
 def _exact_measured_probabilities(omega: float, kappa: float, dt: float, step_list,
-                                  pair, scale: float) -> dict:
+                                  pair, scale: float, noise_kind: str = "depolarizing") -> dict:
     """Exact outcome probabilities of the Stage A shot circuits, and both truths.
 
     p0[state, step, basis] = P(read 0) of stageA_shot_circuit, from the noisy
@@ -2360,7 +2379,7 @@ def _exact_measured_probabilities(omega: float, kappa: float, dt: float, step_li
     the BLP of the Bloch vectors 2 p0 - 1, the infinite-shot limit of the raw
     estimator. Also returns the exact calibration probabilities."""
     from .noise import DEFAULT_PRO
-    nm = build_noise_model(scale=scale)
+    nm = _noise_model(noise_kind, scale)
     p_ro = min(scale * DEFAULT_PRO, 0.5) if scale > 0 else 0.0
 
     def unmeasured(qc):
@@ -2447,7 +2466,8 @@ def _summary(values, state_truth, measured_truth) -> dict:
 def estimator_characterization(n_seeds: int = 1000, shots: int = 4096, n_boot: int = 200,
                                scales=(0.0, 0.5, 1.0, 2.0),
                                grids=(("A", 0.15, 2), ("B", 0.3, 2)),
-                               t_max: float = 9.0, rng_seed: int = 20260925) -> dict:
+                               t_max: float = 9.0, rng_seed: int = 20260925,
+                               noise_kind: str = "depolarizing") -> dict:
     """T2.9 (R11) and T2.10 (R12): the finite-shot estimators on the paper's two
     grids, with counts drawn as Binomial(shots, p) from the exact outcome
     probabilities of the measured circuits; the null-floor decision rules on
@@ -2465,7 +2485,7 @@ def estimator_characterization(n_seeds: int = 1000, shots: int = 4096, n_boot: i
         step_list = list(range(0, int(round(t_max / dt)) + 1, stride))
         rows = []
         for si, scale in enumerate(scales):
-            ex = _exact_measured_probabilities(omega, kappa, dt, step_list, pair, scale)
+            ex = _exact_measured_probabilities(omega, kappa, dt, step_list, pair, scale, noise_kind)
             rng = np.random.default_rng([rng_seed, gi, si, 0])
             per = [_seed_estimators(rng.binomial(shots, ex["p0"]), rng.binomial(shots, ex["p_cal0"]),
                                     shots, n_boot, z_grid, rng) for _ in range(n_seeds)]
@@ -2500,7 +2520,7 @@ def estimator_characterization(n_seeds: int = 1000, shots: int = 4096, n_boot: i
                    "per_seed": {k: [q[k] for q in per] for k in
                                 ("raw", "boot_bc", "jack_bc", "mitigated", "thr_plugin")},
                    "per_seed_threshold_Dbar_z1": thr_bar[:, int(np.argmin(abs(z_grid - 1.0)))]}
-            if gname == "A" and scale in recorded:
+            if gname == "A" and scale in recorded and noise_kind == "depolarizing":
                 rec = recorded[scale]
                 row["state_truth_recorded"] = rec["true_noisy_N_BLP"]
                 checks = {}
@@ -2540,10 +2560,12 @@ def estimator_characterization(n_seeds: int = 1000, shots: int = 4096, n_boot: i
                             "step_list": step_list, "rows": rows}
     out = {"grids": out_grids, "shots": shots, "n_seeds": n_seeds, "n_boot": n_boot,
            "pair": pair, "t_max": t_max, "params": STAGEA_NONMARKOV, "control": STAGEA_MARKOV,
-           "sampling": "Binomial(shots, p) from exact outcome probabilities (R11)"}
-    save_result("estimator_characterization",
+           "sampling": "Binomial(shots, p) from exact outcome probabilities (R11)",
+           "noise_kind": noise_kind}
+    save_result("estimator_characterization" + ("" if noise_kind == "depolarizing" else f"_{noise_kind}"),
                 {"n_seeds": n_seeds, "shots": shots, "n_boot": n_boot, "scales": list(scales),
-                 "grids": [list(g) for g in grids], "rng_seed": rng_seed}, out)
+                 "grids": [list(g) for g in grids], "rng_seed": rng_seed,
+                 "noise_kind": noise_kind}, out)
     return out
 
 

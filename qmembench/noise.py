@@ -75,3 +75,23 @@ def noise_params_dict(scale: float, p1: float = DEFAULT_P1, p2: float = DEFAULT_
         "p_readout_effective": min(scale * p_ro, _CAP_PRO) if scale > 0 else 0.0,
         "model": "depolarizing(sx,x)+depolarizing(cx)+symmetric readout",
     }
+
+
+def build_thermal_relaxation_model(scale: float, t1: float, t2: float, dur_1q: float,
+                                   dur_2q: float, p_ro: float = DEFAULT_PRO) -> NoiseModel | None:
+    """Amplitude damping plus dephasing only (no depolarizing): each sx/x gate
+    and each qubit of a cx relaxes for the gate's duration with T1/scale and
+    T2/scale; symmetric readout error scale * p_ro, as in build_noise_model.
+    scale = 0 returns None."""
+    from qiskit_aer.noise import thermal_relaxation_error
+    if scale <= 0.0:
+        return None
+    T1, T2 = t1 / scale, t2 / scale
+    nm = NoiseModel(basis_gates=["cx", "id", "rz", "sx", "x"])
+    e1 = thermal_relaxation_error(T1, T2, dur_1q)
+    nm.add_all_qubit_quantum_error(e1, ["sx", "x"])
+    e2 = thermal_relaxation_error(T1, T2, dur_2q).expand(thermal_relaxation_error(T1, T2, dur_2q))
+    nm.add_all_qubit_quantum_error(e2, ["cx"])
+    spro = min(scale * p_ro, _CAP_PRO)
+    nm.add_all_qubit_readout_error(ReadoutError([[1 - spro, spro], [spro, 1 - spro]]))
+    return nm

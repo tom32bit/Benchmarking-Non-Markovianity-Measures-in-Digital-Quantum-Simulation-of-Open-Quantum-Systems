@@ -54,3 +54,20 @@ def test_correlated_vs_uncorrelated_dephasing_differ():
     rho_corr = avg_final(lambda m: [fixed[m]] * n_steps)
     rho_uncorr = avg_final(lambda m: per_step[m])
     assert np.max(np.abs(rho_corr - rho_uncorr)) > 1e-3
+
+
+def test_thermal_relaxation_model_damps_an_excited_qubit():
+    """One x gate of duration tau under T1: P(1) = exp(-tau/T1) from |0> -> |1>
+    is approximately preserved; readout error as in the depolarizing model."""
+    import numpy as np
+    from qiskit import QuantumCircuit
+    from qmembench.circuits import run_exact
+    from qmembench.noise import build_thermal_relaxation_model
+    assert build_thermal_relaxation_model(0.0, 1e-4, 8e-5, 3.6e-8, 3.8e-7) is None
+    T1, T2, tau = 1e-6, 1e-6, 2e-7                      # strong relaxation to make it visible
+    nm = build_thermal_relaxation_model(1.0, T1, T2, tau, 4e-7)
+    qc = QuantumCircuit(1)
+    qc.x(0)
+    qc.save_density_matrix(qubits=[0], label="rho_1")
+    rho = run_exact([qc], noise_model=nm)[0]["rho_1"]
+    assert np.real(rho[1, 1]) == pytest.approx(np.exp(-tau / T1), abs=0.02)
