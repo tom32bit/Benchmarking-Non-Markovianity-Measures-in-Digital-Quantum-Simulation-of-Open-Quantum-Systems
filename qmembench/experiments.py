@@ -1722,6 +1722,130 @@ def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.
 
 
 # ===========================================================================
+# RHP: convergence in time step, regularisation and grid alignment (T2.7, R3)
+# ===========================================================================
+
+def _rhp_scan(states, index_lists, rconds) -> dict:
+    """N_RHP and its diagnostics for each sampling grid (a list of indices into
+    ``states``) and each pseudo-inverse cutoff."""
+    from .measures import rhp_diagnostics
+    out = {}
+    for key, idx in index_lists.items():
+        transfers = [transfer_matrix({l: states[l][i] for l in IC_INPUTS}) for i in idx]
+        out[key] = {}
+        for rc in rconds:
+            dg = rhp_diagnostics(transfers, rcond=rc)
+            finite = dg["kappa"][np.isfinite(dg["kappa"])]
+            out[key][f"{rc:g}"] = {
+                "N_RHP": float(dg["g"].sum()),
+                "ill_fraction": float(dg["ill_conditioned"].mean()),
+                "max_kappa": float(finite.max()) if finite.size else float("inf"),
+                "max_abs_choi_trace_dev": float(np.max(np.abs(dg["choi_trace"] - 1.0))),
+                "largest_step_share": float(dg["g"].max() / dg["g"].sum()) if dg["g"].sum() > 0 else 0.0}
+    return out
+
+
+def _offset_grids(t_max: float, fine: float, samplings, offsets) -> dict:
+    """Indices into a fine grid (step ``fine``) for t = 0, then o*s + k*s."""
+    grids = {}
+    for sm in samplings:
+        stride = int(round(sm / fine))
+        n = int(round(t_max / sm))
+        for o in offsets:
+            shift = int(round(o * sm / fine))
+            idx = [0] + [shift + k * stride for k in range(n + 1) if shift + k * stride > 0
+                         and shift + k * stride <= int(round(t_max / fine))]
+            grids[f"s={sm:g},offset={o:g}"] = idx
+    return grids
+
+
+def rhp_convergence_study(family: str, d_ref: int, samplings=(0.1, 0.05, 0.025, 0.0125),
+                          rconds=(1e-4, 1e-6, 1e-8, 1e-10), offsets=(0.0, 0.5)) -> dict:
+    """The RHP values of the paper's appendix table under changes of time step,
+    pseudo-inverse cutoff and grid alignment (rule R3).
+
+    Sources: QuTiP at d_ref and at n = 2 (the circuit's model), solved once on
+    a grid of min(samplings)/2 so that half-step offsets exist; and the
+    circuit with Trotter step = sampling (the paper's setting at 0.05).
+    Window t_max = 10 as in the paper.
+    """
+    t_max = 10.0
+    fine = min(samplings) / 2.0
+    n_fine = int(round(t_max / fine))
+    times = np.linspace(0.0, n_fine * fine, n_fine + 1)
+    grids = _offset_grids(t_max, fine, samplings, offsets)
+    if family == "finite_T":
+        pars = STAGEA_NONMARKOV
+        omega, kappa = stageA_params(**pars)
+        params = [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5]
+
+        def qutip(p, d):
+            return _ic_states(lambda r0, t: stageA_qutip_states_finiteT(
+                r0, t, **pars, n_th=p, n_fock=d, options=TIGHT_SOLVER_OPTIONS), times)
+
+        def circuit(p, dt, n):
+            return [qc_mod.stageA_exact_circuit(l, n, dt, omega, kappa, n_th=p) for l in IC_INPUTS]
+    elif family == "spin_boson":
+        proto = [(1.0, 0.4), (1.6, 0.8)]
+        params = [0.3, 0.4, 0.5, 0.7]
+
+        def qutip(p, d):
+            modes = [(w, p, k) for w, k in proto]
+            return _ic_states(lambda r0, t: spin_boson_qutip_states(
+                r0, t, 1.0, 0.0, modes, n_fock=d, options=TIGHT_SOLVER_OPTIONS), times)
+
+        def circuit(p, dt, n):
+            modes = [(w, p, k) for w, k in proto]
+            return [qc_mod.stageB_exact_circuit(l, n, dt, 1.0, 0.0, modes) for l in IC_INPUTS]
+    else:
+        raise ValueError(f"unknown family {family!r}")
+    rows = []
+    for p in params:
+        row = {"param": p, "reference": _rhp_scan(qutip(p, d_ref), grids, rconds),
+               "nfock2": _rhp_scan(qutip(p, 2), grids, rconds), "circuit": {}}
+        for sm in samplings:
+            n = int(round(t_max / sm))
+            res = qc_mod.run_exact(circuit(p, sm, n))
+            st = {l: np.asarray(qc_mod.exact_states_from_labels(r, n)) for l, r in zip(IC_INPUTS, res)}
+            row["circuit"][f"{sm:g}"] = _rhp_scan(st, {"all": list(range(n + 1))}, rconds)["all"]
+        rows.append(row)
+    out = {"family": family, "d_ref": d_ref, "samplings": list(samplings),
+           "rconds": list(rconds), "offsets": list(offsets), "t_max": t_max, "rows": rows,
+           "paper_configuration": {"sampling": 0.05, "rcond": 1e-6, "offset": 0.0}}
+    save_result(f"rhp_convergence_{family}",
+                {"family": family, "d_ref": d_ref, "samplings": list(samplings),
+                 "rconds": list(rconds), "offsets": list(offsets),
+                 "solver_options": TIGHT_SOLVER_OPTIONS}, out)
+    return out
+
+
+def stageA_rhp_divergence(samplings=(0.1, 0.05, 0.025, 0.0125, 0.00625, 0.003125,
+                                     0.0015625, 0.00078125),
+                          offsets=(0.0, 0.25, 0.5), rconds=(1e-4, 1e-6, 1e-8, 1e-10),
+                          t_max: float = 10.0) -> dict:
+    """A8: the Stage A RHP integral diverges in the continuum, so a discrete
+    value is fixed by the step, the grid alignment and the cutoff. Exact
+    (closed-form) channel; N_RHP on each grid, with the per-step share of the
+    largest term."""
+    pars = STAGEA_NONMARKOV
+    fine = min(samplings) / 4.0              # quarter-step offsets exist
+    n_fine = int(round(t_max / fine))
+    times = np.linspace(0.0, n_fine * fine, n_fine + 1)
+    states = _ic_states(lambda r0, t: analytic_stageA_states(r0, t, **pars), times)
+    scan = _rhp_scan(states, _offset_grids(t_max, fine, samplings, offsets), rconds)
+    g0, lam = pars["gamma0"], pars["lam"]
+    delta = np.sqrt(2.0 * g0 * lam - lam ** 2)
+    zeros = [2.0 * (k * np.pi - np.arctan(delta / lam)) / delta for k in range(1, 100)]
+    out = {"scan": scan, "samplings": list(samplings), "offsets": list(offsets),
+           "rconds": list(rconds), "t_max": t_max, "params": pars,
+           "zeros_of_G_in_window": [float(z) for z in zeros if z <= t_max]}
+    save_result("stageA_rhp_divergence",
+                {"samplings": list(samplings), "offsets": list(offsets),
+                 "rconds": list(rconds), "t_max": t_max}, out)
+    return out
+
+
+# ===========================================================================
 # Trotter order and its mechanism (T2.1, rule R10)
 # ===========================================================================
 
