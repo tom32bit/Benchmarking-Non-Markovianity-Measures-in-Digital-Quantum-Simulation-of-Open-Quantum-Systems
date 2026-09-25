@@ -1041,6 +1041,163 @@ def phase5_fock_rule(quick: bool = False, eps: float = 1e-2, c_var: float = 3.0)
 
 
 # ===========================================================================
+# Revised Fock-dimension rule (T2.8, rule R13)
+# ===========================================================================
+
+FOCK_C_GRID = np.round(np.arange(0.0, 8.0 + 1e-9, 0.25), 2)
+
+
+def _six_moments(mom_ic):
+    """Moments for the six canonical inputs from the four IC ones (linearity)."""
+    m0, m1, mp, mi = (np.asarray(mom_ic[l]) for l in IC_INPUTS)
+    return {"0": m0, "1": m1, "+": mp, "-": m0 + m1 - mp, "+i": mi, "-i": m0 + m1 - mi}
+
+
+def _fock_point(args) -> dict:
+    """One calibration point of the Fock-rule study: per Fock dimension, the
+    worst six-input trajectory deviation from d_ref and the pair-optimised
+    BLP; the predictor max over inputs, modes and time of <n_k> + c sigma_k at
+    d_ref, on FOCK_C_GRID."""
+    from .reference import (TIGHT_SOLVER_OPTIONS, spin_boson_states_moments,
+                            stageA_states_moments, truncated_mode_state)
+    family, param, kind, d_min, d_ref, sampling, t_max = args
+    n = int(round(t_max / sampling))
+    times = np.linspace(0.0, n * sampling, n + 1)
+    proto = [(1.0, 0.4), (1.6, 0.8)]
+
+    def solve(r0, d):
+        if family == "temperature":
+            return stageA_states_moments(r0, times, **STAGEA_NONMARKOV, n_th=param, n_fock=d,
+                                         options=TIGHT_SOLVER_OPTIONS)
+        if family == "coupling":
+            return spin_boson_states_moments(r0, times, 1.0, 0.0, [(w, param, k) for w, k in proto],
+                                             n_fock=d, options=TIGHT_SOLVER_OPTIONS)
+        return stageA_states_moments(r0, times, **STAGEA_NONMARKOV, n_th=0.0, n_fock=d,
+                                     mode_state=truncated_mode_state(kind, param, d),
+                                     options=TIGHT_SOLVER_OPTIONS)
+
+    states, moments = {}, None
+    for d in range(d_min, d_ref + 1):
+        out = {l: solve(dm(l), d) for l in IC_INPUTS}
+        states[d] = {l: np.asarray(v[0]) for l, v in out.items()}
+        if d == d_ref:
+            moments = _six_moments({l: v[1] for l, v in out.items()})
+    ref6 = _six_from_ic(states[d_ref])
+    n_ref = _pair_summary(states[d_ref])[0]["N_BLP_optimized"]
+    per_d = {}
+    for d in range(d_min, d_ref):
+        six = _six_from_ic(states[d])
+        dev = 0.0
+        for l in ref6:
+            D = six[l] - ref6[l]
+            lam = np.sqrt(np.abs((D[:, 0, 0] - D[:, 1, 1]) / 2.0) ** 2 + np.abs(D[:, 0, 1]) ** 2)
+            dev = max(dev, float(lam.max()))                 # (1/2)||rho_d - rho_ref||_1
+        n_d = _pair_summary(states[d])[0]["N_BLP_optimized"]
+        per_d[str(d)] = {"trajectory_dev": dev, "N_opt": n_d, "eps_NM": abs(n_d - n_ref)}
+    mean = np.stack([m[:, 0, :] for m in moments.values()])      # [input, mode, time]
+    sig = np.sqrt(np.maximum(np.stack([m[:, 1, :] for m in moments.values()]) - mean ** 2, 0.0))
+    predictor = [float(np.max(mean + c * sig)) for c in FOCK_C_GRID]
+    i = np.unravel_index(np.argmax(mean + 3.0 * sig), mean.shape)
+    return {"family": family, "param": param, "kind": kind, "d_min": d_min, "d_ref": d_ref,
+            "sampling": sampling, "N_opt_ref": n_ref, "per_d": per_d, "predictor": predictor,
+            "peak_mean_c3": float(mean[i]), "peak_sigma_c3": float(sig[i]),
+            "max_mean": float(mean.max()), "n_modes": int(mean.shape[1])}
+
+
+def _persistent_d_req(per_d: dict, d_min: int, d_ref: int, key: str, eps: float):
+    """Smallest d such that every d' in [d, d_ref) meets the target; d_ref
+    (censored) if even d_ref - 1 fails."""
+    d_req = d_ref
+    for d in range(d_ref - 1, d_min - 1, -1):
+        if per_d[str(d)][key] < eps:
+            d_req = d
+        else:
+            break
+    return d_req, d_req == d_ref
+
+
+def fock_rule_study(n_workers: int = 1, t_max: float = 10.0, tasks=None) -> dict:
+    """R13: the Fock-dimension rule re-derived with per-mode predictors, a
+    persistence criterion, trajectory- and measure-level targets, c fitted per
+    target, cross-validation over three families, and a controlled test of
+    the variance term (equal mean, different number statistics)."""
+    eps_traj = [3e-2, 1e-2, 3e-3]
+    eps_nm = [1e-2, 3e-3, 1e-3]
+    if tasks is None:
+        tasks = _fock_rule_tasks(t_max)
+    return _fock_rule_analysis(tasks, n_workers, t_max, eps_traj, eps_nm)
+
+
+def _fock_rule_tasks(t_max: float) -> list:
+    tasks = []
+    for nth in (0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0):
+        tasks.append(("temperature", nth, "vacuum", 2, 20, 0.00078125, t_max))
+    for g in (0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8):
+        tasks.append(("coupling", g, "vacuum", 2, 10, 0.003125, t_max))
+    for n0 in (1, 2):
+        for kind in ("fock", "coherent", "thermal"):
+            tasks.append(("controlled", float(n0), kind, n0 + 1 if kind == "fock" else 2, 24,
+                          0.00078125, t_max))
+    return tasks
+
+
+def _fock_rule_analysis(tasks, n_workers, t_max, eps_traj, eps_nm) -> dict:
+    config = {"function": "fock_rule_study", "tasks": tasks, "c_grid": FOCK_C_GRID,
+              "solver_options": TIGHT_SOLVER_OPTIONS}
+    points, segments = _run_points_with_checkpoint(_fock_point, tasks, n_workers,
+                                                   "fock_rule_study", config)
+    for pt in points:
+        pt["d_req"] = {}
+        for key, eps_list in (("trajectory_dev", eps_traj), ("eps_NM", eps_nm)):
+            for e in eps_list:
+                d, cens = _persistent_d_req(pt["per_d"], pt["d_min"], pt["d_ref"], key, e)
+                pt["d_req"][f"{key}<{e:g}"] = {"d_req": d, "censored": cens}
+
+    def d_rule(pt, ci):
+        return max(2, int(np.ceil(pt["predictor"][ci])) + 1)
+
+    def c_needed(pts, target):
+        for ci, c in enumerate(FOCK_C_GRID):
+            if all(d_rule(pt, ci) >= pt["d_req"][target]["d_req"] for pt in pts):
+                return float(c), ci
+        return None, None
+
+    targets = [f"trajectory_dev<{e:g}" for e in eps_traj] + [f"eps_NM<{e:g}" for e in eps_nm]
+    families = tuple(dict.fromkeys(pt["family"] for pt in points))
+    calibration = {}
+    for t in targets:
+        c_all, _ = c_needed(points, t)
+        xval = {}
+        for held in families:
+            cal = [pt for pt in points if pt["family"] != held]
+            test = [pt for pt in points if pt["family"] == held]
+            c_cal, ci = c_needed(cal, t)
+            covered = (sum(d_rule(pt, ci) >= pt["d_req"][t]["d_req"] for pt in test) / len(test)
+                       if ci is not None else None)
+            xval[held] = {"c_calibrated_on_others": c_cal, "coverage_of_held_out": covered}
+        calibration[t] = {"c_all_points": c_all, "cross_validation": xval,
+                          "n_censored": sum(pt["d_req"][t]["censored"] for pt in points)}
+    controlled = {}
+    for n0 in sorted({pt["param"] for pt in points if pt["family"] == "controlled"}):
+        by_kind = {pt["kind"]: pt for pt in points if pt["family"] == "controlled" and pt["param"] == n0}
+        controlled[f"{n0:g}"] = {t: {k: v["d_req"][t]["d_req"] for k, v in by_kind.items()}
+                                 for t in targets}
+    consequences = {}
+    for e in eps_traj:
+        t = f"trajectory_dev<{e:g}"
+        consequences[t] = max(pt["per_d"][str(pt["d_req"][t]["d_req"])]["eps_NM"]
+                              for pt in points if not pt["d_req"][t]["censored"])
+    out = {"points": points, "targets": targets, "c_grid": FOCK_C_GRID,
+           "calibration": calibration, "controlled_d_req": controlled,
+           "blp_error_left_at_trajectory_d_req": consequences,
+           "checkpoint_segments_commit_at_import": segments, "t_max": t_max,
+           "rule": "d_rule(c) = ceil(max_{input, mode, t} <n_k> + c sigma_k) + 1"}
+    save_result("fock_rule_study", {"t_max": t_max, "eps_traj": eps_traj, "eps_nm": eps_nm,
+                                    "solver_options": TIGHT_SOLVER_OPTIONS}, out)
+    return out
+
+
+# ===========================================================================
 # BLP pair-optimality certificate (M3) -- how tight is the canonical bound?
 # ===========================================================================
 

@@ -82,3 +82,38 @@ def test_reduced_states_from_expectations_match_partial_trace():
     ref = qt.mesolve(H, rho0, times, c_ops=c_ops, options=TIGHT_SOLVER_OPTIONS).states
     np.testing.assert_allclose(np.asarray(got), np.asarray([s.ptrace(0).full() for s in ref]),
                                atol=1e-12)
+
+
+def test_states_and_moments_match_the_state_solvers():
+    """The combined solve gives the same states as the state-only references,
+    and moments equal direct expectation values."""
+    import qutip as qt
+    from qmembench.reference import (TIGHT_SOLVER_OPTIONS, spin_boson_qutip_states,
+                                     spin_boson_states_moments, stageA_qutip_states_finiteT,
+                                     stageA_states_moments, truncated_mode_state)
+    t = np.linspace(0, 2, 21)
+    ms = truncated_mode_state("thermal", 0.7, 5)
+    s1, mom1 = stageA_states_moments(dm("+"), t, 5.0, 1.0, 0.4, 5, mode_state=ms,
+                                     options=TIGHT_SOLVER_OPTIONS)
+    s2 = stageA_qutip_states_finiteT(dm("+"), t, 5.0, 1.0, 0.4, n_fock=5, mode_state=ms,
+                                     options=TIGHT_SOLVER_OPTIONS)
+    np.testing.assert_allclose(np.asarray(s1), np.asarray(s2), atol=1e-12)
+    assert mom1.shape == (1, 2, 21)
+    assert mom1[0, 0, 0] == pytest.approx(np.real(np.trace(ms @ np.diag(np.arange(5)))), abs=1e-12)
+    modes = [(1.0, 0.5, 0.4), (1.6, 0.5, 0.8)]
+    s3, mom3 = spin_boson_states_moments(dm("+i"), t, 1.0, 0.0, modes, 4, options=TIGHT_SOLVER_OPTIONS)
+    s4 = spin_boson_qutip_states(dm("+i"), t, 1.0, 0.0, modes, n_fock=4, options=TIGHT_SOLVER_OPTIONS)
+    np.testing.assert_allclose(np.asarray(s3), np.asarray(s4), atol=1e-12)
+    assert np.all(mom3[:, 1, :] >= mom3[:, 0, :] ** 2 - 1e-9)       # variance >= 0
+
+
+def test_truncated_mode_states():
+    from qmembench.reference import truncated_mode_state
+    for kind, mean in (("fock", 2), ("coherent", 2.0), ("thermal", 2.0), ("vacuum", 0)):
+        r = truncated_mode_state(kind, mean, 60)          # thermal tail (2/3)^60 ~ 3e-11
+        n = np.real(np.trace(r @ np.diag(np.arange(60))))
+        n2 = np.real(np.trace(r @ np.diag(np.arange(60) ** 2)))
+        assert np.trace(r).real == pytest.approx(1.0)
+        assert n == pytest.approx(mean, abs=1e-4)
+        var = {"fock": 0.0, "coherent": mean, "thermal": mean * (mean + 1), "vacuum": 0.0}[kind]
+        assert n2 - n ** 2 == pytest.approx(var, abs=1e-3)

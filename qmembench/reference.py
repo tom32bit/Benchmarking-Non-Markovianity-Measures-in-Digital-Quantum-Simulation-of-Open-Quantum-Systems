@@ -428,3 +428,94 @@ def evolve_ic_inputs(evolver, times) -> dict[str, list[np.ndarray]]:
     """Evolve the four informationally complete inputs plus the remaining
     canonical-pair partners; ``evolver(rho0, times) -> [rho(t)]``."""
     return {lbl: evolver(dm(lbl), times) for lbl in ("0", "1", "+", "-", "+i", "-i")}
+
+
+# ---------------------------------------------------------------------------
+# States plus per-mode number moments (T2.8, rule R13)
+# ---------------------------------------------------------------------------
+
+def _solve_states_and_moments(H, rho0, times, c_ops, number_ops, options=None):
+    """System states (first tensor factor) and, for each mode number operator,
+    <n_k>(t) and <n_k^2>(t), from one mesolve (expectation values only)."""
+    dims = rho0.dims[0]
+    d0 = dims[0]
+    rest = [qt.qeye(d) for d in dims[1:]]
+    pairs = [(a, b) for a in range(d0) for b in range(d0)]
+    e_sys = [qt.tensor(qt.basis(d0, b) * qt.basis(d0, a).dag(), *rest) for a, b in pairs]
+    e_mom = [op for N in number_ops for op in (N, N * N)]
+    sol = qt.mesolve(H, rho0, np.asarray(times, dtype=float), c_ops=c_ops,
+                     e_ops=e_sys + e_mom, options=options)
+    states = np.zeros((len(times), d0, d0), dtype=complex)
+    for (a, b), vals in zip(pairs, sol.expect[:len(pairs)]):
+        states[:, a, b] = vals
+    mom = np.real(np.array(sol.expect[len(pairs):])).reshape(len(number_ops), 2, len(times))
+    return list(states), mom
+
+
+def truncated_mode_state(kind: str, mean: float, n_fock: int) -> np.ndarray:
+    """Diagonal or coherent mode state of the given mean, truncated to n_fock
+    levels and renormalised, so every dimension starts from the same
+    distribution restricted to its levels. kind: 'vacuum', 'fock', 'coherent',
+    'thermal'. A Fock state needs n_fock > mean."""
+    k = np.arange(n_fock)
+    if kind == "vacuum":
+        amp = (k == 0).astype(complex)
+    elif kind == "fock":
+        if int(round(mean)) >= n_fock:
+            raise ValueError("a Fock state needs n_fock > n")
+        amp = (k == int(round(mean))).astype(complex)
+    elif kind == "coherent":
+        from scipy.special import gammaln
+        alpha = np.sqrt(mean)
+        amp = np.exp(-0.5 * mean + k * np.log(alpha) - 0.5 * gammaln(k + 1)) if mean > 0 \
+            else (k == 0).astype(float)
+        amp = amp.astype(complex)
+    elif kind == "thermal":
+        p = (mean / (mean + 1.0)) ** k / (mean + 1.0)
+        p = p / p.sum()
+        return np.diag(p).astype(complex)
+    else:
+        raise ValueError(kind)
+    amp = amp / np.linalg.norm(amp)
+    return np.outer(amp, amp.conj())
+
+
+def stageA_states_moments(rho0_sys, times, gamma0, lam, n_th, n_fock, mode_state=None,
+                          options=None):
+    """stageA_qutip_states_finiteT plus the mode's <n>, <n^2>."""
+    omega, kappa = stageA_params(gamma0, lam)
+    sm = qt.Qobj(SM_NP)
+    a = qt.destroy(n_fock)
+    H = omega * (qt.tensor(sm.dag(), a) + qt.tensor(sm, a.dag()))
+    c_ops = [np.sqrt(kappa * (n_th + 1.0)) * qt.tensor(qt.qeye(2), a),
+             np.sqrt(kappa * n_th) * qt.tensor(qt.qeye(2), a.dag())]
+    mode = qt.fock_dm(n_fock, 0) if mode_state is None else qt.Qobj(np.asarray(mode_state, dtype=complex))
+    rho0 = qt.tensor(_sys_qobj(rho0_sys), mode)
+    N = qt.tensor(qt.qeye(2), qt.num(n_fock))
+    return _solve_states_and_moments(H, rho0, times, c_ops, [N], options)
+
+
+def spin_boson_states_moments(rho0_sys, times, delta, eps, modes, n_fock, options=None):
+    """spin_boson_qutip_states plus each mode's <n_k>, <n_k^2>."""
+    sx, sz = qt.sigmax(), qt.sigmaz()
+    n_modes = len(modes)
+    ident = [qt.qeye(n_fock)] * n_modes
+
+    def emb_sys(op):
+        return qt.tensor(op, *ident)
+
+    def emb_mode(op, k):
+        ops = [qt.qeye(2)] + list(ident)
+        ops[1 + k] = op
+        return qt.tensor(*ops)
+
+    a = qt.destroy(n_fock)
+    H = 0.5 * delta * emb_sys(sx) + 0.5 * eps * emb_sys(sz)
+    c_ops = []
+    for k, (wk, gk, kappak) in enumerate(modes):
+        H += wk * emb_mode(a.dag() * a, k)
+        H += gk * emb_sys(sz) * emb_mode(a + a.dag(), k)
+        c_ops.append(np.sqrt(kappak) * emb_mode(a, k))
+    rho0 = qt.tensor(_sys_qobj(rho0_sys), *[qt.fock_dm(n_fock, 0)] * n_modes)
+    Ns = [emb_mode(qt.num(n_fock), k) for k in range(n_modes)]
+    return _solve_states_and_moments(H, rho0, times, c_ops, Ns, options)
