@@ -47,21 +47,29 @@ def _sys_qobj(rho: np.ndarray) -> qt.Qobj:
     return qt.Qobj(np.asarray(rho, dtype=complex))
 
 
-def _solve_system_states(H, rho0, times, c_ops, options=None) -> list[np.ndarray]:
-    """mesolve, returning the reduced state of the first tensor factor at each
-    time.  rho_sys[a, b] = Tr[rho (|b><a| (x) 1)] is read from expectation
+def _solve_system_states(H, rho0, times, c_ops, options=None, n_lead=1,
+                         idx=None) -> list[np.ndarray]:
+    """mesolve, returning the reduced state of the first ``n_lead`` tensor
+    factors at each time, restricted to the basis states ``idx`` (all by
+    default).  rho[a, b] = Tr[rho (|b><a| (x) 1)] is read from expectation
     values, so no full state is stored: the same integration as ptrace over
     sol.states, at O(1) memory per output time."""
     dims = rho0.dims[0]
-    d0 = dims[0]
-    rest = [qt.qeye(d) for d in dims[1:]]
-    pairs = [(a, b) for a in range(d0) for b in range(d0)]
-    e_ops = [qt.tensor(qt.basis(d0, b) * qt.basis(d0, a).dag(), *rest) for a, b in pairs]
+    lead = dims[:n_lead]
+    rest = [qt.qeye(d) for d in dims[n_lead:]]
+    d0 = int(np.prod(lead))
+    idx = list(range(d0)) if idx is None else list(idx)
+    pairs = [(i, j) for i in range(len(idx)) for j in range(len(idx))]
+    e_ops = []
+    for i, j in pairs:
+        m = np.zeros((d0, d0), dtype=complex)
+        m[idx[j], idx[i]] = 1.0                     # |b><a| with a = idx[i], b = idx[j]
+        e_ops.append(qt.tensor(qt.Qobj(m, dims=[lead, lead]), *rest))
     sol = qt.mesolve(H, rho0, np.asarray(times, dtype=float), c_ops=c_ops, e_ops=e_ops,
                      options=options)
-    out = np.zeros((len(times), d0, d0), dtype=complex)
-    for (a, b), vals in zip(pairs, sol.expect):
-        out[:, a, b] = vals
+    out = np.zeros((len(times), len(idx), len(idx)), dtype=complex)
+    for (i, j), vals in zip(pairs, sol.expect):
+        out[:, i, j] = vals
     return list(out)
 
 
@@ -327,8 +335,7 @@ def dimer_qutip_excitonic_states(rho0_exc, times, eps_L, eps_R, J, site_modes, n
     sites[np.ix_(idx, idx)] = np.asarray(rho0_exc, dtype=complex)
     rho0 = qt.tensor(qt.Qobj(sites, dims=[[2, 2], [2, 2]]),
                      qt.fock_dm(n_fock, 0), qt.fock_dm(n_fock, 0))
-    sol = qt.mesolve(H, rho0, np.asarray(times, float), c_ops=c_ops, options=options)
-    return [s.ptrace([0, 1]).full()[np.ix_(idx, idx)] for s in sol.states]
+    return _solve_system_states(H, rho0, times, c_ops, options, n_lead=2, idx=idx)
 
 
 # ---------------------------------------------------------------------------

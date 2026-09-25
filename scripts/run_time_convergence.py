@@ -28,12 +28,16 @@ if __name__ == "__main__":
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--only", choices=["stageA", "finite_T", "spin_boson", "phase_diagram",
                                        "noisy"])
+    ap.add_argument("--samplings", type=float, nargs="+",
+                    help="BLP sampling ladder for the finite_T and spin_boson jobs")
     args = ap.parse_args()
+    ladder = {} if args.samplings is None else {"samplings": tuple(args.samplings)}
     jobs = {
         "stageA": E.stageA_blp_time_convergence,
-        "finite_T": lambda: E.tables_blp_time_convergence("finite_T", d_ref=12, quick=args.quick),
+        "finite_T": lambda: E.tables_blp_time_convergence("finite_T", d_ref=12, quick=args.quick,
+                                                          **ladder),
         "spin_boson": lambda: E.tables_blp_time_convergence("spin_boson", d_ref=10,
-                                                            quick=args.quick),
+                                                            quick=args.quick, **ladder),
         "phase_diagram": lambda: E.phase_diagram_blp_time_convergence(d_ref=10),
         "noisy": E.noisy_blp_grid_dependence,
     }

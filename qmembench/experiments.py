@@ -1571,6 +1571,8 @@ def noisy_blp_grid_dependence(scales=(0.0, 0.5, 1.0, 2.0), dt: float = 0.15,
 # ===========================================================================
 
 def dimer_convergence_and_memory(d_max: int = 8, trotter_dts=(0.05, 0.025, 0.0125),
+                                 samplings=(0.05, 0.025, 0.0125, 0.00625, 0.003125,
+                                            0.0015625, 0.00078125),
                                  quick: bool = False) -> dict:
     """The dimer of Sec. 8 revisited on its excitonic qubit {|L>, |R>}.
 
@@ -1581,6 +1583,8 @@ def dimer_convergence_and_memory(d_max: int = 8, trotter_dts=(0.05, 0.025, 0.012
     reference grid with the matched (d = 2) and the top reference.
     (iii) The isolated dimer (g = 0) as a baseline: its dynamics is unitary, so
     its BLP must vanish, and its population revivals are coherent.
+    (iv) Time resolution of the memory value: the top reference and the
+    isolated dimer solved once on the finest of ``samplings`` and subsampled.
     Same parameters, grid (0.05) and window (t_max = 10) as phase8_dimer.
     """
     from .reference import dimer_qutip_excitonic_states
@@ -1636,6 +1640,16 @@ def dimer_convergence_and_memory(d_max: int = 8, trotter_dts=(0.05, 0.025, 0.012
             "excitonic_leakage": max(float(abs(np.trace(m) - 1.0))
                                      for v in blocks.values() for m in v)}
 
+    fine = min(samplings)
+    n_fine = int(round(t_max / fine))
+    t_fine = np.linspace(0.0, n_fine * fine, n_fine + 1)
+    time_ladder = {}
+    for name, modes, d in (("reference", site_modes, dims[-1]), ("isolated", isolated, 2)):
+        states = _ic_states(lambda r0, t: dimer_qutip_excitonic_states(
+            r0, t, eps_L, eps_R, J, modes, n_fock=d, options=TIGHT_SOLVER_OPTIONS), t_fine)
+        time_ladder[name] = {f"{s:g}": _sampled_summary(states, int(round(s / fine)))
+                             for s in samplings}
+
     iso = reference(isolated, 2)        # modes decoupled: the Fock dimension is irrelevant
     iso_sum, _ = _pair_summary(iso)
     p_iso = acceptor(iso)
@@ -1647,6 +1661,7 @@ def dimer_convergence_and_memory(d_max: int = 8, trotter_dts=(0.05, 0.025, 0.012
                         "time_of_first_maximum": float(times[int(np.argmax(p_iso[:n_ref // 3]))]),
                         "N_BLP_optimized_default_tolerances": iso_default["N_BLP_optimized"],
                         "N_BLP_canonical_default_tolerances": iso_default["N_BLP_canonical"]},
+           "time_ladder": time_ladder, "samplings": list(samplings),
            "acceptor_reference_dmax": acceptor(refs[dims[-1]]),
            "acceptor_isolated": p_iso, "times": times,
            "params": {"eps_L": eps_L, "eps_R": eps_R, "J": J, "site_modes": site_modes},
@@ -1656,7 +1671,8 @@ def dimer_convergence_and_memory(d_max: int = 8, trotter_dts=(0.05, 0.025, 0.012
                     "TIGHT_SOLVER_OPTIONS; the *_default_tolerances entries give the "
                     "isolated dimer at mesolve's defaults (the solver-noise floor).")}
     save_result("dimer_convergence_and_memory",
-                {"d_max": dims[-1], "trotter_dts": list(trotter_dts), "quick": quick,
+                {"d_max": dims[-1], "trotter_dts": list(trotter_dts),
+                 "samplings": list(samplings), "quick": quick,
                  "solver_options": TIGHT_SOLVER_OPTIONS}, out)
     return out
 

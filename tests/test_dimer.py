@@ -84,3 +84,24 @@ def test_isolated_dimer_has_no_memory_and_coherent_transfer():
     res = blp_optimize_pair(pauli_images_from_states(states), n_grid=500)
     assert res["N_BLP_optimized"] < 1e-6
     assert max(s[1, 1].real for s in states["0"]) == pytest.approx(0.8, abs=2e-3)
+
+
+def test_excitonic_block_from_expectations_matches_partial_trace():
+    """The excitonic 2x2 block read from expectations equals the block of
+    ptrace([0, 1]) of the stored states, off-diagonals included."""
+    import qutip as qt
+    from qmembench.measures import dm
+    from qmembench.reference import (_EXCITONIC_INDEX, TIGHT_SOLVER_OPTIONS, _dimer_operators,
+                                     dimer_qutip_excitonic_states)
+    times = np.linspace(0, 3, 31)
+    idx = _EXCITONIC_INDEX
+    got = dimer_qutip_excitonic_states(dm("+i"), times, 0.5, -0.5, 1.0, MODES, n_fock=3,
+                                       options=TIGHT_SOLVER_OPTIONS)
+    H, c_ops, _, _ = _dimer_operators(0.5, -0.5, 1.0, MODES, 3)
+    sites = np.zeros((4, 4), dtype=complex)
+    sites[np.ix_(idx, idx)] = dm("+i")
+    rho0 = qt.tensor(qt.Qobj(sites, dims=[[2, 2], [2, 2]]), qt.fock_dm(3, 0), qt.fock_dm(3, 0))
+    ref = qt.mesolve(H, rho0, times, c_ops=c_ops, options=TIGHT_SOLVER_OPTIONS).states
+    np.testing.assert_allclose(np.asarray(got),
+                               np.asarray([s.ptrace([0, 1]).full()[np.ix_(idx, idx)] for s in ref]),
+                               atol=1e-12)
