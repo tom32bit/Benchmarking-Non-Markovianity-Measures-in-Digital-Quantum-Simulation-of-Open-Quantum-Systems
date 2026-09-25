@@ -104,3 +104,26 @@ def test_bounded_fit_recovers_known_parameters():
     fit = fit_chain_params_bounded(target, 60, 2)
     assert fit["rmse"] < 1e-6
     assert fit["at_bound"] == []
+
+
+def test_eigen_path_matches_step_iteration():
+    """The eigendecomposition shortcut for c_0 equals direct iteration."""
+    from qmembench.collision import chain_excitation_amplitude
+    rng = np.random.default_rng(7)
+    for M in (1, 2, 3, 5):
+        ts, th, pl = rng.random() * np.pi, rng.random() * np.pi, rng.random()
+        fast = chain_excitation_amplitude(120, M, ts, th, pl)
+        # direct iteration, written out independently
+        E = np.eye(M + 1, dtype=complex)
+        def ex(t, a, b):
+            U = np.eye(M + 1, dtype=complex)
+            U[a, a] = U[b, b] = np.cos(t); U[a, b] = U[b, a] = -1j * np.sin(t)
+            return U
+        S = ex(ts, 0, 1)
+        for j in range(1, M):
+            S = ex(th, j, j + 1) @ S
+        d = np.ones(M + 1); d[M] = np.sqrt(1 - pl); S = d[:, None] * S
+        c = np.zeros(M + 1, complex); c[0] = 1; slow = [1.0]
+        for _ in range(120):
+            c = S @ c; slow.append(c[0])
+        np.testing.assert_allclose(fast, slow, atol=1e-10)

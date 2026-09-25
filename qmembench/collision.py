@@ -391,6 +391,13 @@ def chain_excitation_amplitude(n_steps: int, M: int, theta_s: float, theta_hop: 
     damp = np.ones(M + 1)
     damp[M] = np.sqrt(1.0 - p_loss)
     step = damp[:, None] * step
+    # c_0(k) = (step^k)_00 = sum_j w_j lam_j^k with w_j = V_0j (V^-1)_j0. When
+    # the eigenbasis is ill conditioned the weights cancel (sum |w_j| >> 1), so
+    # iterate instead.
+    lam, V = np.linalg.eig(step)
+    w = V[0, :] * np.linalg.inv(V)[:, 0]
+    if np.sum(np.abs(w)) < 1e4:
+        return (lam[None, :] ** np.arange(n_steps + 1)[:, None]) @ w
     c = np.zeros(M + 1, dtype=complex)
     c[0] = 1.0
     out = [c[0]]
@@ -401,25 +408,39 @@ def chain_excitation_amplitude(n_steps: int, M: int, theta_s: float, theta_hop: 
 
 
 def fit_chain_params_bounded(target_pe: np.ndarray, n_steps: int, M: int,
-                             seed: int = 0, maxiter: int = 400) -> dict:
+                             seed: int = 0, n_starts: int = 256, maxiter: int = 400,
+                             warm_starts=()) -> dict:
     """Fit (theta_s, theta_hop, p_loss) of the M-chain to a target P_e(t) on
     the step grid, within explicit bounds theta in [0, pi], p_loss in [0, 1]
-    (no clipping), by differential evolution polished with L-BFGS-B. Reports
-    which parameters end on a bound."""
+    (no clipping). The landscape is rough, so the best of: bounded L-BFGS-B
+    from ``n_starts`` Sobol points and from ``warm_starts``, and differential
+    evolution. Reports which parameters end on a bound."""
     from scipy.optimize import differential_evolution
+    from scipy.stats import qmc
     target_pe = np.asarray(target_pe, float)
     bounds = [(0.0, np.pi), (0.0, np.pi), (0.0, 1.0)]
+    lo, hi = np.array([b[0] for b in bounds]), np.array([b[1] for b in bounds])
 
     def loss(x):
         pe = np.abs(chain_excitation_amplitude(n_steps, M, x[0], x[1], x[2])) ** 2
         return float(np.sum((pe - target_pe) ** 2))
 
+    starts = list(qmc.Sobol(d=3, scramble=True, seed=seed).random(n_starts) * (hi - lo) + lo)
+    starts += [np.clip(np.asarray(w, float), lo, hi) for w in warm_starts]
+    best_x, best_f = None, np.inf
+    for x0 in starts:
+        r = minimize(loss, x0, method="L-BFGS-B", bounds=bounds,
+                     options={"maxiter": maxiter, "ftol": 1e-15, "gtol": 1e-12})
+        if r.fun < best_f:
+            best_x, best_f = r.x, r.fun
     de = differential_evolution(loss, bounds=bounds, maxiter=maxiter, tol=1e-12, seed=seed,
                                 polish=True, init="sobol", popsize=30)
-    x = de.x
+    if de.fun < best_f:
+        best_x, best_f = de.x, de.fun
+    x = best_x
     pe = np.abs(chain_excitation_amplitude(n_steps, M, *x)) ** 2
-    at_bound = [name for name, v, (lo, hi) in zip(("theta_s", "theta_hop", "p_loss"), x, bounds)
-                if min(v - lo, hi - v) < 1e-6]
+    at_bound = [name for name, v, (lo_, hi_) in zip(("theta_s", "theta_hop", "p_loss"), x, bounds)
+                if min(v - lo_, hi_ - v) < 1e-6]
     return {"M": M, "theta_s": float(x[0]), "theta_hop": float(x[1]), "p_loss": float(x[2]),
             "rmse": float(np.sqrt(np.mean((pe - target_pe) ** 2))), "at_bound": at_bound,
-            "n_qubits_circuit": M + 2}
+            "n_starts": n_starts, "n_warm_starts": len(warm_starts), "n_qubits_circuit": M + 2}

@@ -1833,14 +1833,20 @@ def gate_count_study(dts_pm=(0.45, 0.3, 0.225, 0.15, 0.1, 0.075, 0.05),
     for dt in chain_dts:
         N_ex, n = exact_blp(dt)
         target = np.abs(analytic_G(np.linspace(0.0, n * dt, n + 1), **pars)) ** 2
+        warm = []
         for M in chain_Ms:
-            fit = col_mod.fit_chain_params_bounded(target, n, M)
+            # the chain gets its best fit: 512 bounded starts plus the (M-1) solution,
+            # and an independent refit (128 starts, another seed) as a convergence check
+            fit = col_mod.fit_chain_params_bounded(target, n, M, n_starts=512, warm_starts=warm)
+            check = col_mod.fit_chain_params_bounded(target, n, M, n_starts=128, seed=1)
+            warm = [(fit["theta_s"], fit["theta_hop"], fit["p_loss"])]
             c0 = col_mod.chain_excitation_amplitude(n, M, fit["theta_s"], fit["theta_hop"], fit["p_loss"])
             N = blp_from_curve(np.abs(c0))
             cx = qc_mod.resource_counts(col_mod.chain_collision_exact_circuit(
                 "+", n, M, fit["theta_s"], fit["theta_hop"], fit["p_loss"], save_every=n))["cx_count"]
             chain.append({"dt": dt, "M": M, "n_steps": n, "cx": cx, "N_BLP": N,
-                          "N_exact_grid": N_ex, "error": abs(N - N_ex), **fit})
+                          "N_exact_grid": N_ex, "error": abs(N - N_ex), **fit,
+                          "rmse_independent_refit": check["rmse"]})
     f_pm = _pareto_front([(r["cx"], r["error"]) for r in pm])
     f_ch = _pareto_front([(r["cx"], r["error"]) for r in chain])
     lo = max(f_pm[0][0], f_ch[0][0])
