@@ -68,3 +68,39 @@ def test_chain_fit_improves_or_holds_with_M():
     r3 = fit_chain_params(target, len(times) - 1, M=3, maxiter=120)
     assert r3["rmse"] <= r1["rmse"] + 0.02
     assert r3["n_qubits_circuit"] == 5  # 1 system + 3 chain + 1 damping ancilla
+
+
+@pytest.mark.parametrize("M", [1, 2, 3])
+def test_single_excitation_amplitude_matches_full_chain(M):
+    """P_e and the (+,-) trace distance of the full chain equal |c_0|^2 and |c_0|."""
+    from qmembench.collision import chain_collision_states_numpy, chain_excitation_amplitude
+    from qmembench.measures import trace_distance
+    args = (25, M, 0.37, 0.81, 0.23)
+    c0 = chain_excitation_amplitude(*args)
+    pe = [s[1, 1].real for s in chain_collision_states_numpy("1", *args)]
+    np.testing.assert_allclose(np.abs(c0) ** 2, pe, atol=1e-12)
+    sp, sm = chain_collision_states_numpy("+", *args), chain_collision_states_numpy("-", *args)
+    np.testing.assert_allclose([trace_distance(a, b) for a, b in zip(sp, sm)], np.abs(c0), atol=1e-12)
+
+
+def test_pseudomode_is_the_one_site_chain():
+    """M = 1 with theta_s = Omega dt and p_loss = 1 - exp(-kappa dt) reproduces
+    the Stage A circuit's |G_c|."""
+    from qmembench.circuits import exact_states_from_labels, run_exact, stageA_exact_circuit
+    from qmembench.collision import chain_excitation_amplitude
+    from qmembench.measures import trace_distance
+    from qmembench.reference import stageA_params
+    omega, kappa = stageA_params(5.0, 1.0)
+    dt, n = 0.1, 40
+    c0 = chain_excitation_amplitude(n, 1, omega * dt, 0.0, 1.0 - np.exp(-kappa * dt))
+    sp = exact_states_from_labels(run_exact([stageA_exact_circuit("+", n, dt, omega, kappa)])[0], n)
+    sm = exact_states_from_labels(run_exact([stageA_exact_circuit("-", n, dt, omega, kappa)])[0], n)
+    np.testing.assert_allclose([trace_distance(a, b) for a, b in zip(sp, sm)], np.abs(c0), atol=1e-10)
+
+
+def test_bounded_fit_recovers_known_parameters():
+    from qmembench.collision import chain_excitation_amplitude, fit_chain_params_bounded
+    target = np.abs(chain_excitation_amplitude(60, 2, 0.4, 0.9, 0.3)) ** 2
+    fit = fit_chain_params_bounded(target, 60, 2)
+    assert fit["rmse"] < 1e-6
+    assert fit["at_bound"] == []

@@ -360,3 +360,66 @@ def fit_chain_params(target_pe: np.ndarray, n_steps: int, M: int,
     return {"M": M, "theta_s": float(ts), "theta_hop": float(th), "p_loss": pl,
             "rmse": float(np.sqrt(np.mean((pe - target_pe) ** 2))),
             "n_qubits_circuit": 1 + M + 1}  # + one damping-dilation ancilla
+
+
+# ---------------------------------------------------------------------------
+# Single-excitation reduction of the chain (T1.9 / T2.13)
+#
+# The chain conserves excitation number except for the damping at its far
+# end, and its environment starts in the vacuum. Started from |1> on the
+# system, the state is the vacuum plus one excitation whose amplitudes
+# c_0 (system), c_1..c_M (chain) evolve linearly: an exchange by theta on
+# sites (a, b) maps (c_a, c_b) -> (cos theta c_a - i sin theta c_b,
+# -i sin theta c_a + cos theta c_b); the damping multiplies c_M by
+# sqrt(1 - p_loss). Hence P_e(t) = |c_0(t)|^2, and for this amplitude-damping
+# type channel the optimal-pair trace distance is |c_0(t)| (antipodal
+# equatorial pair). M = 1 with theta_s = Omega dt, p_loss = 1 - exp(-kappa dt)
+# is the pseudomode circuit.
+# ---------------------------------------------------------------------------
+
+def chain_excitation_amplitude(n_steps: int, M: int, theta_s: float, theta_hop: float,
+                               p_loss: float) -> np.ndarray:
+    """c_0 after k = 0..n_steps steps of the chain started from |1>."""
+    def exchange(theta, a, b):
+        E = np.eye(M + 1, dtype=complex)
+        E[a, a] = E[b, b] = np.cos(theta)
+        E[a, b] = E[b, a] = -1j * np.sin(theta)
+        return E
+    step = exchange(theta_s, 0, 1)
+    for j in range(1, M):
+        step = exchange(theta_hop, j, j + 1) @ step
+    damp = np.ones(M + 1)
+    damp[M] = np.sqrt(1.0 - p_loss)
+    step = damp[:, None] * step
+    c = np.zeros(M + 1, dtype=complex)
+    c[0] = 1.0
+    out = [c[0]]
+    for _ in range(n_steps):
+        c = step @ c
+        out.append(c[0])
+    return np.array(out)
+
+
+def fit_chain_params_bounded(target_pe: np.ndarray, n_steps: int, M: int,
+                             seed: int = 0, maxiter: int = 400) -> dict:
+    """Fit (theta_s, theta_hop, p_loss) of the M-chain to a target P_e(t) on
+    the step grid, within explicit bounds theta in [0, pi], p_loss in [0, 1]
+    (no clipping), by differential evolution polished with L-BFGS-B. Reports
+    which parameters end on a bound."""
+    from scipy.optimize import differential_evolution
+    target_pe = np.asarray(target_pe, float)
+    bounds = [(0.0, np.pi), (0.0, np.pi), (0.0, 1.0)]
+
+    def loss(x):
+        pe = np.abs(chain_excitation_amplitude(n_steps, M, x[0], x[1], x[2])) ** 2
+        return float(np.sum((pe - target_pe) ** 2))
+
+    de = differential_evolution(loss, bounds=bounds, maxiter=maxiter, tol=1e-12, seed=seed,
+                                polish=True, init="sobol", popsize=30)
+    x = de.x
+    pe = np.abs(chain_excitation_amplitude(n_steps, M, *x)) ** 2
+    at_bound = [name for name, v, (lo, hi) in zip(("theta_s", "theta_hop", "p_loss"), x, bounds)
+                if min(v - lo, hi - v) < 1e-6]
+    return {"M": M, "theta_s": float(x[0]), "theta_hop": float(x[1]), "p_loss": float(x[2]),
+            "rmse": float(np.sqrt(np.mean((pe - target_pe) ** 2))), "at_bound": at_bound,
+            "n_qubits_circuit": M + 2}

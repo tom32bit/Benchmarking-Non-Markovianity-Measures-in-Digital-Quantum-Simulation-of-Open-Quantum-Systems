@@ -1783,13 +1783,14 @@ def correlated_noise_study(sigmas=(0.05, 0.1, 0.2), tau_cs=(0.1, 0.3, 1.0, 3.0, 
         # the paper's old convention: equal accumulated phase variance at t_max,
         # set by the quasi-static value at each sigma
         fixed_acc = []
-        for sigma in sigmas:
-            target = accumulated_phase_variance(sigma, np.inf, n_steps, dt)
-            for tau in tau_cs:
-                s_eff = sigma * np.sqrt(target / accumulated_phase_variance(sigma, tau, n_steps, dt))
-                v = blp(model, s_eff, tau, n_tel_ou)
-                fixed_acc.append({"process": "ou", "sigma_quasi_static": sigma, "tau_c": tag(tau),
-                                  "sigma_effective": float(s_eff), **v})
+        for process, n_tel in (("telegraph", 1), ("ou", n_tel_ou)):
+            for sigma in sigmas:
+                target = accumulated_phase_variance(sigma, np.inf, n_steps, dt)
+                for tau in tau_cs:
+                    s_eff = sigma * np.sqrt(target / accumulated_phase_variance(sigma, tau, n_steps, dt))
+                    v = blp(model, s_eff, tau, n_tel)
+                    fixed_acc.append({"process": process, "sigma_quasi_static": sigma,
+                                      "tau_c": tag(tau), "sigma_effective": float(s_eff), **v})
         out[model] = {"noiseless": noiseless, "fixed_stationary_variance": fixed_var,
                       "fixed_accumulated_variance": fixed_acc}
     save_result("correlated_noise_study",
