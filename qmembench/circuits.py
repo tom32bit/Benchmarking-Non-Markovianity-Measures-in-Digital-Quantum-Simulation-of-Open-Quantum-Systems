@@ -137,6 +137,61 @@ def stageA_exact_circuit(init: str, n_steps: int, dt: float, omega: float,
     return qc
 
 
+def exact_gad_block(qc: QuantumCircuit, target: int, anc: int, coin: int, gamma: float,
+                    p_down: float) -> None:
+    """The exact generalized-amplitude-damping channel on ``target``:
+    p_down * AD(gamma) + (1 - p_down) * X AD(gamma) X. A reset coin qubit
+    carries the mixture weights; tracing it out removes the cross terms. For
+    kappa (n+1) D[a] + kappa n D[a^dag] on a two-level mode over dt this is
+    exp(dt L_D) with gamma = 1 - e^{-kappa (2n+1) dt}, p_down = (n+1)/(2n+1)."""
+    qc.reset(coin)
+    qc.ry(2.0 * np.arccos(np.sqrt(np.clip(p_down, 0.0, 1.0))), coin)
+    qc.cx(coin, target)
+    amplitude_damping_block(qc, target, anc, gamma)
+    qc.cx(coin, target)
+
+
+def stageA_variant_circuit(init: str, n_steps: int, dt: float, omega: float, kappa: float,
+                           n_th: float = 0.0, order: str = "UD", mode_init: str = "0",
+                           gad: str = "split") -> QuantumCircuit:
+    """Stage A step variants for the Trotter-order mechanism checks (A1).
+
+    ``order`` "UD" is the production step (coherent block, then damping);
+    "DU" reverses it. ``mode_init`` "1" starts the mode excited. ``gad``
+    "split" is the production damping (emission, then absorption); "exact"
+    applies exp(dt L_D) in one block (exact_gad_block). With the defaults the
+    circuit equals stageA_exact_circuit. Qubits: system, mode, ancilla, coin.
+    """
+    if order not in ("UD", "DU") or gad not in ("split", "exact") or mode_init not in ("0", "1"):
+        raise ValueError("order in {UD, DU}, gad in {split, exact}, mode_init in {0, 1}")
+    qc = QuantumCircuit(4)
+    prepare_state(qc, 0, init)
+    if mode_init == "1":
+        qc.x(1)
+    qc.save_density_matrix(qubits=[0], label="rho_0")
+
+    def coherent():
+        qc.rxx(omega * dt, 0, 1)
+        qc.ryy(omega * dt, 0, 1)
+
+    def damping():
+        if gad == "exact":
+            exact_gad_block(qc, 1, 2, 3, 1.0 - np.exp(-kappa * (2.0 * n_th + 1.0) * dt),
+                            (n_th + 1.0) / (2.0 * n_th + 1.0))
+        elif n_th <= 0.0:
+            amplitude_damping_block(qc, target=1, anc=2, p=1.0 - np.exp(-kappa * dt))
+        else:
+            generalized_amplitude_damping_block(
+                qc, target=1, anc=2, p_down=1.0 - np.exp(-kappa * (n_th + 1.0) * dt),
+                p_up=1.0 - np.exp(-kappa * n_th * dt))
+
+    for k in range(1, n_steps + 1):
+        for block in ((coherent, damping) if order == "UD" else (damping, coherent)):
+            block()
+        qc.save_density_matrix(qubits=[0], label=f"rho_{k}")
+    return qc
+
+
 def stageA_exact_circuit_dephased(init: str, n_steps: int, dt: float, omega: float,
                                   kappa: float, phi_list: list[float],
                                   save_every: int = 1, n_th: float = 0.0) -> QuantumCircuit:

@@ -81,3 +81,37 @@ def test_memory_decreases_with_temperature():
         return blp_measure(curves)[0]
 
     assert blp_at(1.0) < blp_at(0.0)
+
+
+def test_variant_circuit_defaults_equal_production_circuit():
+    from qmembench.circuits import stageA_variant_circuit
+    omega, kappa = stageA_params(GAMMA0, LAM)
+    for n_th in (0.0, 0.5):
+        a = run_exact([stageA_exact_circuit("+i", 12, 0.1, omega, kappa, n_th=n_th)])[0]
+        b = run_exact([stageA_variant_circuit("+i", 12, 0.1, omega, kappa, n_th=n_th)])[0]
+        np.testing.assert_allclose(np.asarray(exact_states_from_labels(a, 12)),
+                                   np.asarray(exact_states_from_labels(b, 12)), atol=1e-12)
+
+
+@pytest.mark.parametrize("n_th", [0.0, 0.5, 1.5])
+def test_exact_gad_block_is_the_thermal_channel(n_th):
+    """exact_gad_block = exp(dt L_D) for L_D = kappa(n+1) D[a] + kappa n D[a^dag]
+    on a two-level mode, on a state with coherences."""
+    import qutip as qt
+    from qmembench.circuits import exact_gad_block
+    kappa, dt = 2.0, 0.3
+    qc = QuantumCircuit(3)
+    qc.ry(1.1, 0)
+    qc.rz(0.4, 0)
+    qc.save_density_matrix(qubits=[0], label="rho_0")
+    exact_gad_block(qc, 0, 1, 2, 1.0 - np.exp(-kappa * (2 * n_th + 1) * dt),
+                    (n_th + 1) / (2 * n_th + 1))
+    qc.save_density_matrix(qubits=[0], label="rho_1")
+    data = run_exact([qc])[0]
+    rho_in, got = qt.Qobj(data["rho_0"]), data["rho_1"]
+    assert abs(rho_in.full()[0, 1]) > 0.1                 # the input carries coherence
+    a = qt.destroy(2)
+    c_ops = [np.sqrt(kappa * (n_th + 1)) * a, np.sqrt(kappa * n_th) * a.dag()]
+    ref = qt.mesolve(qt.qzero(2), rho_in, [0.0, dt], c_ops=c_ops,
+                     options={"atol": 1e-12, "rtol": 1e-10}).states[-1].full()
+    np.testing.assert_allclose(got, ref, atol=1e-9)

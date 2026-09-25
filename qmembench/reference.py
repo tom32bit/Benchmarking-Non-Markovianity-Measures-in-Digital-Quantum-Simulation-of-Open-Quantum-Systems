@@ -163,7 +163,8 @@ def stageA_qutip_states(rho0_sys: np.ndarray, times: np.ndarray, gamma0: float,
 
 def stageA_qutip_states_finiteT(rho0_sys: np.ndarray, times: np.ndarray, gamma0: float,
                                 lam: float, n_th: float, n_fock: int = 2,
-                                options: dict | None = None) -> list[np.ndarray]:
+                                options: dict | None = None,
+                                mode_state: np.ndarray | None = None) -> list[np.ndarray]:
     """Thermal-reservoir reference: the pseudomode is damped toward mean
     occupation n_th via emission sqrt(kappa(n_th+1)) a and absorption
     sqrt(kappa n_th) a^dag.
@@ -174,6 +175,9 @@ def stageA_qutip_states_finiteT(rho0_sys: np.ndarray, times: np.ndarray, gamma0:
     truncation error that the single-qubit circuit encoding must incur -- the
     finite-T axis feeds directly into the 'truncation fabricates memory'
     centerpiece.
+
+    ``mode_state`` (n_fock x n_fock) replaces the vacuum as the initial mode
+    state (the Trotter mechanism checks).
     """
     omega, kappa = stageA_params(gamma0, lam)
     sm = qt.Qobj(SM_NP)
@@ -181,7 +185,8 @@ def stageA_qutip_states_finiteT(rho0_sys: np.ndarray, times: np.ndarray, gamma0:
     H = omega * (qt.tensor(sm.dag(), a) + qt.tensor(sm, a.dag()))
     c_ops = [np.sqrt(kappa * (n_th + 1.0)) * qt.tensor(qt.qeye(2), a),
              np.sqrt(kappa * n_th) * qt.tensor(qt.qeye(2), a.dag())]
-    rho0 = qt.tensor(_sys_qobj(rho0_sys), qt.fock_dm(n_fock, 0))
+    mode = qt.fock_dm(n_fock, 0) if mode_state is None else qt.Qobj(np.asarray(mode_state, dtype=complex))
+    rho0 = qt.tensor(_sys_qobj(rho0_sys), mode)
     return _solve_system_states(H, rho0, times, c_ops, options)
 
 

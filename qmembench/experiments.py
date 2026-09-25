@@ -1677,6 +1677,195 @@ def dimer_convergence_and_memory(d_max: int = 8, trotter_dts=(0.05, 0.025, 0.012
     return out
 
 
+def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.0) -> dict:
+    """Fock convergence of the pair-optimised BLP at a fine sampling (B-G3:
+    Fock dimension and time resolution together). ``family``: "finite_T"
+    (Table 1 points), "spin_boson" (Table 2 points) or "dimer" (Sec. 8)."""
+    from .reference import dimer_qutip_excitonic_states
+    n = int(round(t_max / sampling))
+    times = np.linspace(0.0, n * sampling, n + 1)
+    dims = sorted(dims)
+    if family == "finite_T":
+        params = [0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5]
+
+        def evolver(p, d):
+            return lambda r0, t: stageA_qutip_states_finiteT(
+                r0, t, **STAGEA_NONMARKOV, n_th=p, n_fock=d, options=TIGHT_SOLVER_OPTIONS)
+    elif family == "spin_boson":
+        params = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7]
+        proto = [(1.0, 0.4), (1.6, 0.8)]
+
+        def evolver(p, d):
+            modes = [(w, p, k) for w, k in proto]
+            return lambda r0, t: spin_boson_qutip_states(
+                r0, t, 1.0, 0.0, modes, n_fock=d, options=TIGHT_SOLVER_OPTIONS)
+    elif family == "dimer":
+        params = [0.25]                    # the site coupling g of Sec. 8
+
+        def evolver(p, d):
+            site_modes = [(0.8, p, 0.3), (0.8, p, 0.3)]
+            return lambda r0, t: dimer_qutip_excitonic_states(
+                r0, t, 0.5, -0.5, 1.0, site_modes, n_fock=d, options=TIGHT_SOLVER_OPTIONS)
+    else:
+        raise ValueError(f"unknown family {family!r}")
+    rows = []
+    for p in params:
+        vals = {d: _pair_summary(_ic_states(evolver(p, d), times))[0]["N_BLP_optimized"]
+                for d in dims}
+        rows.append({"param": p, "N_BLP_optimized": {str(d): v for d, v in vals.items()},
+                     "eps_NM_to_top": {str(d): abs(v - vals[dims[-1]]) for d, v in vals.items()}})
+    out = {"family": family, "dims": dims, "sampling": sampling, "t_max": t_max, "rows": rows}
+    save_result(f"joint_fock_time_{family}",
+                {"family": family, "dims": dims, "sampling": sampling, "t_max": t_max,
+                 "solver_options": TIGHT_SOLVER_OPTIONS}, out)
+    return out
+
+
+# ===========================================================================
+# Trotter order and its mechanism (T2.1, rule R10)
+# ===========================================================================
+
+def _fit_order(dts, errs) -> dict:
+    """Least-squares slope of log(err) against log(dt), with its standard error."""
+    x, y = np.log(np.asarray(dts, float)), np.log(np.asarray(errs, float))
+    A = np.vstack([x, np.ones_like(x)]).T
+    coef = np.linalg.lstsq(A, y, rcond=None)[0]
+    resid = y - A @ coef
+    dof = max(len(x) - 2, 1)
+    cov = (resid @ resid / dof) * np.linalg.inv(A.T @ A)
+    return {"order": float(coef[0]), "stderr": float(np.sqrt(cov[0, 0])), "n_points": len(x)}
+
+
+def trotter_order_study(dts=(0.4, 0.2, 0.1, 0.05, 0.025, 0.0125, 0.00625), t_max: float = 12.0,
+                        n_th: float = 0.5, g_stageB: float = 0.4, n_fit: int = 5) -> dict:
+    """Trotter order of the circuits, and the A1 mechanism checks (rule R10).
+
+    Error at step dt: max over the six inputs and the common times (multiples
+    of max(dts)) of the trace distance between circuit and reference; the
+    element-wise maximum alongside. Reference: the closed form for Stage A at
+    T = 0 from vacuum; otherwise QuTiP on the circuit's own model (n = 2) at
+    TIGHT_SOLVER_OPTIONS, solved once on the finest step and subsampled. The
+    BLP error is taken on each step's own grid. The order is fitted over the
+    n_fit smallest steps (and over all).
+    """
+    from .reference import dimer_qutip_excitonic_states
+    pars = STAGEA_NONMARKOV
+    omega, kappa = stageA_params(**pars)
+    dts = sorted(dts, reverse=True)
+    fine = dts[-1]
+    n_fine = int(round(t_max / fine))
+    t_fine = np.linspace(0.0, n_fine * fine, n_fine + 1)
+    common = int(round(dts[0] / fine))            # fine-grid stride of the common times
+    q_th = n_th / (2.0 * n_th + 1.0)              # excited population of the two-level thermal mode
+    mode_th = np.diag([1.0 - q_th, q_th])
+    mode_up = np.diag([0.0, 1.0])
+
+    def qutip_A(n, mode_state=None):
+        return lambda r0, t: stageA_qutip_states_finiteT(
+            r0, t, **pars, n_th=n, n_fock=2, options=TIGHT_SOLVER_OPTIONS, mode_state=mode_state)
+
+    def analytic_A(r0, t):
+        return analytic_stageA_states(r0, t, **pars)
+
+    def circuit_A(mode_weights=(("0", 1.0),), **kw):
+        """Stage A variant circuit; a mixed initial mode is run per basis state
+        and mixed with ``mode_weights`` (exact by linearity)."""
+        def run(dt, n):
+            out = {}
+            for l in IC_INPUTS:
+                res = qc_mod.run_exact([qc_mod.stageA_variant_circuit(
+                    l, n, dt, omega, kappa, mode_init=m, **kw) for m, _ in mode_weights])
+                out[l] = sum(w * np.asarray(qc_mod.exact_states_from_labels(r, n))
+                             for (_, w), r in zip(mode_weights, res))
+            return out
+        return run
+
+    thermal = (("0", 1.0 - q_th), ("1", q_th))
+    proto = [(1.0, 0.4), (1.6, 0.8)]
+    sb_modes = [(w, g_stageB, k) for w, k in proto]
+    dimer = dict(eps_L=0.5, eps_R=-0.5, J=1.0, site_modes=[(0.8, 0.25, 0.3), (0.8, 0.25, 0.3)])
+    idx = qc_mod.DIMER_EXCITONIC_INDEX
+
+    def run_stageB(dt, n):
+        res = qc_mod.run_exact([qc_mod.stageB_exact_circuit(l, n, dt, 1.0, 0.0, sb_modes)
+                                for l in IC_INPUTS])
+        return {l: np.asarray(qc_mod.exact_states_from_labels(r, n))
+                for l, r in zip(IC_INPUTS, res)}
+
+    def run_dimer(dt, n):
+        res = qc_mod.run_exact([qc_mod.dimer_exact_circuit_excitonic(l, n, dt, **dimer)
+                                for l in IC_INPUTS])
+        return {l: np.asarray([m[np.ix_(idx, idx)] for m in qc_mod.exact_states_from_labels(r, n)])
+                for l, r in zip(IC_INPUTS, res)}
+
+    variants = [
+        ("stageA_T0", "production step, T = 0, vacuum start", 2, "closed form",
+         analytic_A, circuit_A()),
+        ("A1_i_finite_T", f"finite T (n_th = {n_th}), vacuum start, split GAD", 1, "QuTiP n=2",
+         qutip_A(n_th), circuit_A(n_th=n_th)),
+        ("A1_ii_reversed", "T = 0, damping before the coherent block", 1, "closed form",
+         analytic_A, circuit_A(order="DU")),
+        ("A1_iii_excited_mode", "T = 0, mode starts in |1>", 1, "QuTiP n=2",
+         qutip_A(0.0, mode_up), circuit_A(mode_weights=(("1", 1.0),))),
+        ("A1_iv_thermal_start_exact_gad", f"n_th = {n_th}, thermal start, exact GAD", 2,
+         "QuTiP n=2", qutip_A(n_th, mode_th), circuit_A(thermal, n_th=n_th, gad="exact")),
+        ("diag_vacuum_start_exact_gad", f"n_th = {n_th}, vacuum start, exact GAD", 1,
+         "QuTiP n=2", qutip_A(n_th), circuit_A(n_th=n_th, gad="exact")),
+        ("diag_thermal_start_split_gad", f"n_th = {n_th}, thermal start, split GAD", 1,
+         "QuTiP n=2", qutip_A(n_th, mode_th), circuit_A(thermal, n_th=n_th)),
+        ("stageB", f"spin-boson, g = {g_stageB}, two modes", 1, "QuTiP n=2",
+         lambda r0, t: spin_boson_qutip_states(r0, t, 1.0, 0.0, sb_modes, n_fock=2,
+                                               options=TIGHT_SOLVER_OPTIONS),
+         run_stageB),
+        ("dimer", "excitonic dimer (Sec. 8 parameters)", 1, "QuTiP n=2",
+         lambda r0, t: dimer_qutip_excitonic_states(r0, t, n_fock=2,
+                                                    options=TIGHT_SOLVER_OPTIONS, **dimer),
+         run_dimer),
+    ]
+    rows = []
+    for name, desc, predicted, ref_kind, evolver, circuit in variants:
+        ref = _six_from_ic(_ic_states(evolver, t_fine))
+        per_dt = []
+        for dt in dts:
+            n = int(round(t_max / dt))
+            stride = int(round(dt / fine))
+            ic = circuit(dt, n)
+            circ = _six_from_ic(ic)
+            step_c = int(round(dts[0] / dt))
+            tn = el = 0.0
+            for l in ref:
+                a, b = circ[l][::step_c], ref[l][::common]
+                tn = max(tn, max(0.5 * trace_norm(x - y) for x, y in zip(a, b)))
+                el = max(el, float(np.max(np.abs(a - b))))
+            c_sum, _ = _pair_summary(ic)
+            r_sum, _ = _pair_summary({l: ref[l][::stride] for l in IC_INPUTS})
+            per_dt.append({"dt": dt, "trace_distance_error": tn, "elementwise_error": el,
+                           "blp_opt_circuit": c_sum["N_BLP_optimized"],
+                           "blp_opt_reference": r_sum["N_BLP_optimized"],
+                           "blp_opt_error": abs(c_sum["N_BLP_optimized"] - r_sum["N_BLP_optimized"]),
+                           "blp_pm_error": abs(c_sum["canonical_by_pair"]["+|-"]
+                                               - r_sum["canonical_by_pair"]["+|-"])})
+        errs = [e["trace_distance_error"] for e in per_dt]
+        rows.append({"variant": name, "description": desc, "predicted_order": predicted,
+                     "reference": ref_kind, "per_dt": per_dt,
+                     "fit_smallest": _fit_order(dts[-n_fit:], errs[-n_fit:]),
+                     "fit_all": _fit_order(dts, errs),
+                     "fit_elementwise_smallest": _fit_order(
+                         dts[-n_fit:], [e["elementwise_error"] for e in per_dt][-n_fit:])})
+    # the QuTiP reference against the closed form where both exist (A-M3)
+    q = _six_from_ic(_ic_states(qutip_A(0.0), t_fine))
+    a = _six_from_ic(_ic_states(analytic_A, t_fine))
+    out = {"rows": rows, "dts": dts, "t_max": t_max, "n_th": n_th, "g_stageB": g_stageB,
+           "n_fit": n_fit, "common_time_step": dts[0],
+           "qutip_vs_closed_form_max_trace_distance": max(
+               max(0.5 * trace_norm(x - y) for x, y in zip(q[l], a[l])) for l in q),
+           "params": pars}
+    save_result("trotter_order_study",
+                {"dts": dts, "t_max": t_max, "n_th": n_th, "g_stageB": g_stageB, "n_fit": n_fit,
+                 "solver_options": TIGHT_SOLVER_OPTIONS}, out)
+    return out
+
+
 # ===========================================================================
 # Phase 8 (Tier 3) -- FMO-like excitonic dimer (generalisation demo)
 # ===========================================================================
