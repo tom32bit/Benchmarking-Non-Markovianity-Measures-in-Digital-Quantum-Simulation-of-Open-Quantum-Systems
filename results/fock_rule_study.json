@@ -1,11 +1,11 @@
 {
  "provenance": {
-  "timestamp_utc": "2026-09-25T19:27:26.170649+00:00",
+  "timestamp_utc": "2026-10-16T08:08:27.671695+00:00",
   "qmembench_version": "0.1.0",
-  "git_commit": "a5bb3f56148061380bc95acc40b53b22e3f7f6fb",
-  "git_commit_at_import": "287f6af2caff7868dd4ff2940eb375c102f9d374",
+  "git_commit": "faff9f1f93dfee37c53c49048d1efe67079ec686+dirty",
+  "git_commit_at_import": "faff9f1f93dfee37c53c49048d1efe67079ec686+dirty",
   "python": "3.12.6",
-  "platform": "Windows-11-10.0.26200-SP0",
+  "platform": "Windows-11-10.0.26300-SP0",
   "versions": {
    "numpy": "1.26.4",
    "scipy": "1.15.2",
@@ -3183,19 +3183,19 @@
     "n_censored": 0
    },
    "trajectory_dev<0.01": {
-    "c_all_points": 3.0,
+    "c_all_points": 3.25,
     "cross_validation": {
      "temperature": {
-      "c_calibrated_on_others": 3.0,
+      "c_calibrated_on_others": 3.25,
       "coverage_of_held_out": 1.0
      },
      "coupling": {
-      "c_calibrated_on_others": 3.0,
+      "c_calibrated_on_others": 3.25,
       "coverage_of_held_out": 1.0
      },
      "controlled": {
       "c_calibrated_on_others": 3.0,
-      "coverage_of_held_out": 1.0
+      "coverage_of_held_out": 0.8333333333333334
      }
     },
     "n_censored": 0
@@ -3344,10 +3344,14 @@
    "trajectory_dev<0.01": 0.027926892311096657,
    "trajectory_dev<0.003": 0.0057947358299763885
   },
+  "rule": "d_rule(c) = ceil(max_{input, mode, t} <n_k> + c sigma_k) + 1",
   "checkpoint_segments_commit_at_import": [
    "287f6af2caff7868dd4ff2940eb375c102f9d374"
   ],
   "t_max": 10.0,
-  "rule": "d_rule(c) = ceil(max_{input, mode, t} <n_k> + c sigma_k) + 1"
+  "recalibrated_from": {
+   "timestamp_utc": "2026-09-25T19:27:26.170649+00:00",
+   "git_commit": "a5bb3f56148061380bc95acc40b53b22e3f7f6fb"
+  }
  }
 }

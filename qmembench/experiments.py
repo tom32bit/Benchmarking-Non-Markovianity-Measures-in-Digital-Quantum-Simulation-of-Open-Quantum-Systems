@@ -920,7 +920,7 @@ def fock_rule_variance_aware(n: float, std: float, c: float = 3.0) -> int:
     """Variance-aware rule d = ceil(n + c*std) + 1, using the actual number
     std at peak load. Accounts for super-Poissonian thermal statistics, so a
     single ``c`` bounds BOTH the coupling and temperature families."""
-    return max(2, int(np.ceil(n + c * std) + 1))
+    return max(2, int(np.ceil(round(n + c * std, 9)) + 1))
 
 
 def phase5_fock_rule(quick: bool = False, eps: float = 1e-2, c_var: float = 3.0) -> dict:
@@ -1440,6 +1440,34 @@ def _fock_rule_analysis(tasks, n_workers, t_max, eps_traj, eps_nm) -> dict:
               "solver_options": TIGHT_SOLVER_OPTIONS}
     points, segments = _run_points_with_checkpoint(_fock_point, tasks, n_workers,
                                                    "fock_rule_study", config)
+    out = _fock_rule_calibrate(points, eps_traj, eps_nm)
+    out.update({"checkpoint_segments_commit_at_import": segments, "t_max": t_max})
+    save_result("fock_rule_study", {"t_max": t_max, "eps_traj": eps_traj, "eps_nm": eps_nm,
+                                    "solver_options": TIGHT_SOLVER_OPTIONS}, out)
+    return out
+
+
+def fock_rule_recalibrate() -> dict:
+    """Redo the calibration of results/fock_rule_study.json from its stored
+    points (predictors and per-dimension errors), without re-solving, and save
+    it under the same name; the previous record stays in results/history/."""
+    with open(RESULTS_DIR / "fock_rule_study.json", encoding="utf-8") as fh:
+        old = json.load(fh)
+    params = old["provenance"]["params"]
+    points = [{k: v for k, v in pt.items() if k != "d_req"} for pt in old["data"]["points"]]
+    out = _fock_rule_calibrate(points, params["eps_traj"], params["eps_nm"])
+    out.update({"checkpoint_segments_commit_at_import": old["data"]["checkpoint_segments_commit_at_import"],
+                "t_max": old["data"]["t_max"],
+                "recalibrated_from": {"timestamp_utc": old["provenance"]["timestamp_utc"],
+                                      "git_commit": old["provenance"]["git_commit"]}})
+    save_result("fock_rule_study", params, out)
+    return out
+
+
+def _fock_rule_calibrate(points, eps_traj, eps_nm) -> dict:
+    """d_req per target, the constant c per target (all points and leave-one-
+    family-out), the controlled-statistics table, and the measure error that
+    each trajectory target leaves."""
     for pt in points:
         pt["d_req"] = {}
         for key, eps_list in (("trajectory_dev", eps_traj), ("eps_NM", eps_nm)):
@@ -1448,7 +1476,10 @@ def _fock_rule_analysis(tasks, n_workers, t_max, eps_traj, eps_nm) -> dict:
                 pt["d_req"][f"{key}<{e:g}"] = {"d_req": d, "censored": cens}
 
     def d_rule(pt, ci):
-        return max(2, int(np.ceil(pt["predictor"][ci])) + 1)
+        # Round off float noise first: <n> + c*sigma can be an exact integer
+        # (a coherent state with <n> = 1 at integer c), where a bare ceil
+        # would add a level the rule does not give.
+        return max(2, int(np.ceil(round(pt["predictor"][ci], 9))) + 1)
 
     def c_needed(pts, target):
         for ci, c in enumerate(FOCK_C_GRID):
@@ -1481,14 +1512,10 @@ def _fock_rule_analysis(tasks, n_workers, t_max, eps_traj, eps_nm) -> dict:
         t = f"trajectory_dev<{e:g}"
         consequences[t] = max(pt["per_d"][str(pt["d_req"][t]["d_req"])]["eps_NM"]
                               for pt in points if not pt["d_req"][t]["censored"])
-    out = {"points": points, "targets": targets, "c_grid": FOCK_C_GRID,
-           "calibration": calibration, "controlled_d_req": controlled,
-           "blp_error_left_at_trajectory_d_req": consequences,
-           "checkpoint_segments_commit_at_import": segments, "t_max": t_max,
-           "rule": "d_rule(c) = ceil(max_{input, mode, t} <n_k> + c sigma_k) + 1"}
-    save_result("fock_rule_study", {"t_max": t_max, "eps_traj": eps_traj, "eps_nm": eps_nm,
-                                    "solver_options": TIGHT_SOLVER_OPTIONS}, out)
-    return out
+    return {"points": points, "targets": targets, "c_grid": FOCK_C_GRID,
+            "calibration": calibration, "controlled_d_req": controlled,
+            "blp_error_left_at_trajectory_d_req": consequences,
+            "rule": "d_rule(c) = ceil(max_{input, mode, t} <n_k> + c sigma_k) + 1"}
 
 
 # ===========================================================================

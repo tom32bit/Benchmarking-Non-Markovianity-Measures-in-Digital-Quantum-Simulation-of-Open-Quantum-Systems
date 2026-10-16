@@ -219,8 +219,95 @@ def fig_dimer_populations() -> Path:
     return _save(fig, "dimer_populations.png")
 
 
+def fig_phase_diagram_optimized() -> Path:
+    """Signed truncation error N(n=2) - N(d_ref) for the optimised pair, and the
+    reference memory, over the (coupling, temperature) plane (rule R7 record).
+
+    Points with |error| <= 1e-3 are drawn grey (sign not resolved); points where
+    the reference changes by >= 1e-3 between d_check and d_ref are dotted. The
+    zero contour is drawn where the reference memory is at least 5e-3.
+    """
+    from matplotlib.colors import TwoSlopeNorm
+    _style()
+    d = _load("phase9_truncation_phase_diagram_optimized")
+    g, nth = np.array(d["g"]), np.array(d["n_th"])
+    E = np.array(d["signed_error_optimized"])
+    ref = np.array(d["reference_optimized"])
+    chk = np.array(d["reference_check_max_abs"])
+    G, T = np.meshgrid(g, nth)
+    fig, axes = plt.subplots(1, 2, figsize=(6.6, 2.7))
+    for ax in axes:
+        ax.grid(False)
+    ax = axes[0]
+    resolved = np.abs(E) > 1e-3
+    norm = TwoSlopeNorm(vmin=float(E.min()), vcenter=0.0, vmax=float(E.max()))
+    pcm = ax.pcolormesh(G, T, np.ma.masked_where(~resolved, E), cmap="RdBu_r", norm=norm,
+                        shading="nearest", rasterized=True)
+    ax.pcolormesh(G, T, np.ma.masked_where(resolved, np.zeros_like(E)), cmap="Greys",
+                  vmin=-1, vmax=4, shading="nearest", rasterized=True)
+    ax.contour(G, T, np.ma.masked_where(ref < 5e-3, E), levels=[0.0], colors=INK,
+               linewidths=0.9)
+    unver = chk >= 1e-3
+    ax.plot(G[unver], T[unver], ls="none", marker=".", ms=1.6, color=INK)
+    cb = fig.colorbar(pcm, ax=ax, pad=0.02)
+    cb.set_label(r"$\mathcal{N}_{\mathrm{BLP}}(n{=}2) - \mathcal{N}_{\mathrm{BLP}}(d{=}%d)$"
+                 % d["d_ref"])
+    cb.ax.tick_params(labelsize=6.5)
+    ax.text(0.68, 0.12, "overstates", ha="center", va="center", fontsize=7.5, color=INK)
+    ax.text(0.40, 0.95, "understates", ha="center", va="center", fontsize=7.5, color=INK)
+    ax.set_title("(a) signed truncation error", fontsize=7, color=INK, loc="left")
+    ax = axes[1]
+    pcm2 = ax.pcolormesh(G, T, ref, cmap="viridis", shading="nearest", rasterized=True)
+    cb2 = fig.colorbar(pcm2, ax=ax, pad=0.02)
+    cb2.set_label(r"$\mathcal{N}_{\mathrm{BLP}}(d{=}%d)$" % d["d_ref"])
+    cb2.ax.tick_params(labelsize=6.5)
+    ax.set_title("(b) reference memory", fontsize=7, color=INK, loc="left")
+    for ax in axes:
+        ax.set_xlabel("coupling $g$")
+        ax.set_ylabel(r"thermal occupation $\bar n$")
+    fig.tight_layout(w_pad=1.0)
+    return _save(fig, "phase_diagram_optimized.png")
+
+
+def fig_fock_rule() -> Path:
+    """Required Fock dimension at the measure-level target eps_NM < 1e-3
+    against (a) the peak mean occupation and (b) the variance-aware predictor
+    at the calibrated c, for the three families of the R13 study."""
+    _style()
+    d = _load("fock_rule_study")
+    t = "eps_NM<0.001"
+    c = d["calibration"][t]["c_all_points"]
+    ci = int(np.argmin(np.abs(np.array(d["c_grid"]) - c)))
+    fig, axes = plt.subplots(1, 2, figsize=(6.6, 2.6), sharey=True)
+    styles = {("temperature", "vacuum"): (SERIES[1], "o", "temperature"),
+              ("coupling", "vacuum"): (SERIES[0], "s", "coupling"),
+              ("controlled", "fock"): (SERIES[2], "^", "Fock start"),
+              ("controlled", "coherent"): (SERIES[2], "D", "coherent start"),
+              ("controlled", "thermal"): (SERIES[2], "v", "thermal start")}
+    for (fam, kind), (col, mk, lab) in styles.items():
+        pts = [p for p in d["points"] if p["family"] == fam and p["kind"] == kind]
+        y = [p["d_req"][t]["d_req"] for p in pts]
+        filled = fam != "controlled"
+        kw = dict(ls="none", marker=mk, ms=4.5, mec=col, mew=1.0,
+                  mfc=col if filled else "white", label=lab)
+        axes[0].plot([p["max_mean"] for p in pts], y, **kw)
+        axes[1].plot([p["predictor"][ci] for p in pts], y, **kw)
+    xg = np.linspace(0.0, max(p["predictor"][ci] for p in d["points"]) + 0.5, 600)
+    axes[1].plot(xg, np.ceil(xg) + 1, color=INK2, lw=0.9, label=r"$\lceil x\rceil + 1$")
+    axes[0].set_xlabel(r"peak mean occupation $\langle n\rangle$")
+    axes[1].set_xlabel(r"predictor $\max(\langle n_k\rangle + %g\,\sigma_k)$" % c)
+    axes[0].set_ylabel(r"required dimension $d_{\mathrm{req}}$")
+    axes[0].set_title("(a) mean occupation", fontsize=7, color=INK, loc="left")
+    axes[1].set_title(r"(b) variance-aware predictor, $c = %g$" % c, fontsize=7, color=INK,
+                      loc="left")
+    axes[0].legend(loc="upper left", fontsize=6.2)
+    axes[1].legend(handles=axes[1].get_lines()[-1:], loc="upper left", fontsize=6.2)
+    fig.tight_layout(w_pad=0.8)
+    return _save(fig, "fock_rule.png")
+
+
 ALL = (fig_estimator_bias, fig_estimator_zsweep, fig_noise_washout_zne, fig_correlated_noise,
-       fig_embedding_cx, fig_dimer_populations)
+       fig_embedding_cx, fig_dimer_populations, fig_phase_diagram_optimized, fig_fock_rule)
 
 if __name__ == "__main__":
     for f in ALL:
