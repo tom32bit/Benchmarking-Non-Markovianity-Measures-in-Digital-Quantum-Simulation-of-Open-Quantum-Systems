@@ -1,9 +1,9 @@
 {
  "provenance": {
-  "timestamp_utc": "2026-10-16T08:08:27.671695+00:00",
+  "timestamp_utc": "2026-10-17T07:04:53.683681+00:00",
   "qmembench_version": "0.1.0",
-  "git_commit": "faff9f1f93dfee37c53c49048d1efe67079ec686+dirty",
-  "git_commit_at_import": "faff9f1f93dfee37c53c49048d1efe67079ec686+dirty",
+  "git_commit": "00468edbaba44b9655bbeb133bc45ca377a73f14",
+  "git_commit_at_import": "00468edbaba44b9655bbeb133bc45ca377a73f14",
   "python": "3.12.6",
   "platform": "Windows-11-10.0.26300-SP0",
   "versions": {
