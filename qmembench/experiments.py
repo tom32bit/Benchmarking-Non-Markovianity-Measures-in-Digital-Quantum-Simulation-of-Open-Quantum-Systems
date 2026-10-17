@@ -1458,8 +1458,10 @@ def fock_rule_recalibrate() -> dict:
     out = _fock_rule_calibrate(points, params["eps_traj"], params["eps_nm"])
     out.update({"checkpoint_segments_commit_at_import": old["data"]["checkpoint_segments_commit_at_import"],
                 "t_max": old["data"]["t_max"],
-                "recalibrated_from": {"timestamp_utc": old["provenance"]["timestamp_utc"],
-                                      "git_commit": old["provenance"]["git_commit"]}})
+                # point at the run that solved the points, not at an earlier recalibration
+                "recalibrated_from": old["data"].get("recalibrated_from") or
+                {"timestamp_utc": old["provenance"]["timestamp_utc"],
+                 "git_commit": old["provenance"]["git_commit"]}})
     save_result("fock_rule_study", params, out)
     return out
 
