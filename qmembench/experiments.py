@@ -181,7 +181,8 @@ def phase1(quick: bool = False, dt: float | None = None) -> dict:
     tiers: dict[str, dict[str, list[np.ndarray]]] = {}
     tiers["analytic"] = {lbl: analytic_stageA_states(dm(lbl), times, **pars)
                          for lbl in ("0", "1", "+", "-", "+i", "-i")}
-    tiers["qutip"] = {lbl: stageA_qutip_states(dm(lbl), times, **pars, n_fock=2)
+    tiers["qutip"] = {lbl: stageA_qutip_states(dm(lbl), times, **pars, n_fock=2,
+                                               options=TIGHT_SOLVER_OPTIONS)
                       for lbl in ("0", "1", "+", "-", "+i", "-i")}
     tiers["circuit"] = _circuit_states_stageA(times, dt, **pars)
 
@@ -195,10 +196,16 @@ def phase1(quick: bool = False, dt: float | None = None) -> dict:
     def max_dev(t1, t2):
         return max(float(np.max(np.abs(np.array(tiers[t1][l]) - np.array(tiers[t2][l]))))
                    for l in tiers[t1])
+    def max_trace_dist(t1, t2):
+        return max(max(0.5 * trace_norm(a - b) for a, b in zip(tiers[t1][l], tiers[t2][l]))
+                   for l in tiers[t1])
     out["max_abs_dev_qutip_vs_analytic"] = max_dev("qutip", "analytic")
     out["max_abs_dev_circuit_vs_analytic"] = max_dev("circuit", "analytic")
+    out["max_trace_dist_circuit_vs_analytic"] = max_trace_dist("circuit", "analytic")
     out["blp_error_circuit_vs_analytic"] = abs(out["circuit"]["N_BLP"] - out["analytic"]["N_BLP"])
-    save_result("phase1_stageA_validation", {"dt": dt, "t_max": t_max, **pars}, out)
+    out["blp_error_qutip_vs_analytic"] = abs(out["qutip"]["N_BLP"] - out["analytic"]["N_BLP"])
+    save_result("phase1_stageA_validation", {"dt": dt, "t_max": t_max, **pars,
+                                             "solver_options": TIGHT_SOLVER_OPTIONS}, out)
     return out
 
 
