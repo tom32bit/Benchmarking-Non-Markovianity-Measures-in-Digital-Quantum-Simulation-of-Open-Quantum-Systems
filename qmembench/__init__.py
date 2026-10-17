@@ -10,4 +10,4 @@ reference (analytic solution and/or QuTiP `mesolve` on the enlarged
 system + pseudomode space) before any physics conclusion is drawn.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

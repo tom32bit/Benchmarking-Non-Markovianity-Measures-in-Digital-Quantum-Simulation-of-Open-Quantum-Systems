@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qmembench"
-version = "0.1.0"
+version = "0.2.0"
 description = "Signatures of Memory Under Noise: benchmarking non-Markovianity measures in digital quantum simulation of open quantum systems"
 requires-python = ">=3.10"
 dependencies = [

@@ -5,15 +5,16 @@ abstract: >-
   A validated, simulator-based framework for quantifying non-Markovian memory in
   digital quantum simulations of open quantum systems, and for measuring how that
   quantification is affected by state-space truncation, finite-shot statistics,
-  and device noise. Includes a measure-first validation chain, a regime-dependent
-  truncation-error analysis with a cross-validated Fock-dimension rule, a
-  ground-truth-validated shot-noise bias analysis, a device-noise conflation
-  study, and a resource-fair embedding comparison.
+  and device noise: pair-optimized BLP measures checked against exact references,
+  a variance-aware Fock-dimension rule calibrated per accuracy target, finite-shot
+  estimators characterized against ground truth, an exact correlated-noise study,
+  and an embedding comparison at equal gate cost.
 type: software
+version: "0.2.0"
 authors:
   - given-names: "S.M. Yousuf Iqbal"
     family-names: "Tomal"
-    email: "yousuf.iqbal.tomal@g.bracu.ac.bd"
+    email: "yousuf.tomal.0@gmail.com"
     orcid: "https://orcid.org/0009-0000-3391-3824"
     affiliation: "Department of Computer Science and Engineering, BRAC University, Dhaka, Bangladesh"
 keywords:
