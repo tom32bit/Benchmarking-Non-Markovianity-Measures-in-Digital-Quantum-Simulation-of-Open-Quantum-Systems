@@ -77,7 +77,7 @@ suffix marks a run made with uncommitted changes in the working tree).
 | `rhp_convergence_*`, `stageA_rhp_divergence` | `rhp_convergence_study`, `stageA_rhp_divergence` | Sec. 3.4, App. F |
 | `fock_rule_study` | `fock_rule_study`, `fock_rule_recalibrate` | Sec. 4, Fig. 5, App. E |
 | `estimator_characterization*`, `aer_shot_dispersion_check` | `estimator_characterization`, `aer_shot_dispersion_check` | Sec. 5, App. C, App. D |
-| `noise_model_mapping`, `zne_multiseed` | same names | Sec. 6.1, App. D |
+| `noise_model_mapping`, `zne_multiseed`, `phase3_noise_models` | `noise_model_mapping`, `zne_multiseed`, `phase3_noise_models` | Sec. 6.1, App. D |
 | `noisy_blp_grid_dependence` | same name | Sec. 5.3 |
 | `correlated_noise_study` | `correlated_noise_study` | Sec. 6.2 |
 | `gate_count_study`, `embedding_noise_leg` | same names | Sec. 7 |
@@ -85,7 +85,8 @@ suffix marks a run made with uncommitted changes in the working tree).
 | `phase7_scaling` | `phase7_scaling` | Fig. 9 |
 
 The other `phase*` records come from the submitted version of the paper and are
-kept as history; the revised paper does not use them. The long studies
+kept as history; the revised paper does not use them (`phase1_stageA_validation`,
+`phase3_noise_models` and `phase7_scaling` were rerun on the revised code). The long studies
 checkpoint to `results/checkpoints/` and resume when rerun.
 
 ## Repository layout

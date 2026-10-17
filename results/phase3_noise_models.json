@@ -1,12 +1,16 @@
 {
  "provenance": {
-  "timestamp_utc": "2026-07-04T07:19:53.836163+00:00",
-  "qmembench_version": "0.1.0",
+  "timestamp_utc": "2026-10-17T07:40:24.357262+00:00",
+  "qmembench_version": "0.2.0",
+  "git_commit": "6d2dad194dfd28860497dc788fee1ee40d9de7b9",
+  "git_commit_at_import": "6d2dad194dfd28860497dc788fee1ee40d9de7b9",
   "python": "3.12.6",
-  "platform": "Windows-11-10.0.26200-SP0",
+  "platform": "Windows-11-10.0.26300-SP0",
   "versions": {
    "numpy": "1.26.4",
+   "scipy": "1.15.2",
    "qiskit": "0.46.3",
+   "qiskit_aer": "0.13.3",
    "qutip": "5.3.0"
   },
   "seed": 1234,
