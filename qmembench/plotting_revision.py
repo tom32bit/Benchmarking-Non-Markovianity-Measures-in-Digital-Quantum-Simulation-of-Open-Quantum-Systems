@@ -306,8 +306,55 @@ def fig_fock_rule() -> Path:
     return _save(fig, "fock_rule.png")
 
 
+def fig_scaling() -> Path:
+    """(a) Trotter error against the step (trotter_order_study); (b) trajectory
+    error against the Fock dimension in the temperature family (fock_rule_study);
+    (c) transpiled depth and CX count against the number of steps (phase7_scaling)."""
+    _style()
+    tr = _load("trotter_order_study")
+    fk = _load("fock_rule_study")
+    rs = _load("phase7_scaling")
+    fig, axes = plt.subplots(1, 3, figsize=(6.9, 2.4))
+    ax = axes[0]
+    variants = (("stageA_T0", "Stage A, $T = 0$"), ("A1_i_finite_T", r"Stage A, $\bar n = 0.5$"),
+                ("stageB", "Stage B, $g = 0.4$"), ("dimer", "dimer"))
+    rows = {r["variant"]: r for r in tr["rows"]}
+    for (v, lab), col, mk in zip(variants, SERIES, "osD^"):
+        r = rows[v]
+        ax.loglog([x["dt"] for x in r["per_dt"]], [x["trace_distance_error"] for x in r["per_dt"]],
+                  marker=mk, ms=3, color=col, lw=1.0,
+                  label=f"{lab} (order {r['fit_smallest']['order']:.2f})")
+    ax.set_xlabel(r"Trotter step $\delta t$")
+    ax.set_ylabel("max trace-distance error")
+    ax.legend(fontsize=5.2, loc="lower right")
+    ax.set_title("(a) Trotter error", fontsize=7, color=INK, loc="left")
+    ax = axes[1]
+    for nth, col in zip((0.5, 1.0, 2.0), ORDINAL[1:]):
+        p = next(q for q in fk["points"] if q["family"] == "temperature" and q["param"] == nth)
+        dd = sorted(p["per_d"], key=int)
+        ax.semilogy([int(k) for k in dd], [p["per_d"][k]["trajectory_dev"] for k in dd],
+                    marker="o", ms=2.5, color=col, lw=1.0, label=rf"$\bar n = {nth:g}$")
+    ax.set_xlabel("Fock dimension $d$")
+    ax.set_ylabel("max trace-distance error")
+    ax.legend(fontsize=6)
+    ax.set_title("(b) truncation error", fontsize=7, color=INK, loc="left")
+    ax = axes[2]
+    st = rs["resources_vs_steps"]
+    ax.plot([r["n_steps"] for r in st], [r["depth"] for r in st], marker="o", ms=3,
+            color=SERIES[0], lw=1.0, label="depth")
+    ax.plot([r["n_steps"] for r in st], [r["cx"] for r in st], marker="s", ms=3,
+            color=SERIES[1], lw=1.0, label="CX count")
+    ax.set_xlabel("Trotter steps")
+    ax.set_ylabel("transpiled count")
+    ax.legend(fontsize=6)
+    ax.set_title("(c) circuit resources", fontsize=7, color=INK, loc="left")
+    fig.tight_layout(w_pad=0.6)
+    return _save(fig, "scaling.png")
+
+
 ALL = (fig_estimator_bias, fig_estimator_zsweep, fig_noise_washout_zne, fig_correlated_noise,
-       fig_embedding_cx, fig_dimer_populations, fig_phase_diagram_optimized, fig_fock_rule)
+       fig_embedding_cx, fig_dimer_populations, fig_phase_diagram_optimized, fig_fock_rule,
+       fig_scaling)
 
 if __name__ == "__main__":
     for f in ALL:

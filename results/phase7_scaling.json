@@ -1,17 +1,21 @@
 {
  "provenance": {
-  "timestamp_utc": "2026-07-11T07:44:50.947708+00:00",
+  "timestamp_utc": "2026-10-17T07:02:50.133875+00:00",
   "qmembench_version": "0.1.0",
+  "git_commit": "bbf3e315d3470507187b0f16a24c33d8d83bd89c",
+  "git_commit_at_import": "bbf3e315d3470507187b0f16a24c33d8d83bd89c",
   "python": "3.12.6",
-  "platform": "Windows-11-10.0.26200-SP0",
+  "platform": "Windows-11-10.0.26300-SP0",
   "versions": {
    "numpy": "1.26.4",
+   "scipy": "1.15.2",
    "qiskit": "0.46.3",
+   "qiskit_aer": "0.13.3",
    "qutip": "5.3.0"
   },
   "seed": null,
   "params": {
-   "quick": true
+   "quick": false
   }
  },
  "data": {
@@ -31,9 +35,13 @@
    {
     "dt": 0.025,
     "max_dev": 0.00015671255952537377
+   },
+   {
+    "dt": 0.0125,
+    "max_dev": 3.9178018070407106e-05
    }
   ],
-  "trotter_order_estimate": 1.9910501702503256,
+  "trotter_order_estimate": 1.9937137132795337,
   "truncation": [
    {
     "d": 2,
