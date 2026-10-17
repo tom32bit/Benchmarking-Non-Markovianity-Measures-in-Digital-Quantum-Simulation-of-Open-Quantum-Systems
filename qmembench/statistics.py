@@ -119,7 +119,7 @@ def null_floor(control_counts, step_list, pair) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Vectorised estimators for the estimator characterisation (T2.9, rule R11)
+# Vectorised estimators for the estimator characterisation
 #
 # Counts are arrays of '0' outcomes, n0[..., state, step, basis], out of
 # ``shots``; the two states are the pair members and the bases are X, Y, Z.
@@ -192,7 +192,7 @@ def jackknife_bias_blp(n0: np.ndarray, shots: int) -> float:
 
 
 def a3_moments(mu, s, z):
-    """A3 (Gaussian increments X ~ N(mu, s^2)): E[X 1{X > z s}] and
+    """Gaussian increments X ~ N(mu, s^2): E[X 1{X > z s}] and
     E[X^2 1{X > z s}], elementwise; z broadcasts against mu, s."""
     from scipy.stats import norm
     mu, s = np.asarray(mu, dtype=float), np.maximum(np.asarray(s, dtype=float), 1e-300)

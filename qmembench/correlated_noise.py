@@ -1,4 +1,4 @@
-"""Exact ensemble averages of Stage A under correlated detuning noise (T1.11).
+"""Exact ensemble averages of Stage A under correlated detuning noise.
 
 The detuning delta(t) is a finite-state Markov process: a sum of ``n_tel``
 independent telegraph components s_i(t) = +-1, each switching at rate

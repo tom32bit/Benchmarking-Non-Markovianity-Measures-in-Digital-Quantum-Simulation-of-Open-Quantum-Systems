@@ -1,4 +1,4 @@
-"""Exact noise-averaged Stage A dynamics under correlated detuning (T1.11)."""
+"""Exact noise-averaged Stage A dynamics under correlated detuning."""
 import numpy as np
 import pytest
 

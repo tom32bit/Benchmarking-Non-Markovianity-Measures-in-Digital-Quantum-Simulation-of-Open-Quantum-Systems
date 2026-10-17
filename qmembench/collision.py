@@ -363,7 +363,7 @@ def fit_chain_params(target_pe: np.ndarray, n_steps: int, M: int,
 
 
 # ---------------------------------------------------------------------------
-# Single-excitation reduction of the chain (T1.9 / T2.13)
+# Single-excitation reduction of the chain
 #
 # The chain conserves excitation number except for the damping at its far
 # end, and its environment starts in the vacuum. Started from |1> on the

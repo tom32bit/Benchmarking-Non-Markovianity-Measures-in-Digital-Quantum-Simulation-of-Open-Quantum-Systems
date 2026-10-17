@@ -1,4 +1,4 @@
-"""Trotter order of the circuits and the A1 mechanism checks (rule R10).
+"""Trotter order of the circuits and the checks of its mechanism.
 
 Writes results/trotter_order_study.json.
 """

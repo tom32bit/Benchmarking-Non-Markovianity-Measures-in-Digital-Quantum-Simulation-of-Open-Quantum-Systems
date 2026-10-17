@@ -431,7 +431,7 @@ def evolve_ic_inputs(evolver, times) -> dict[str, list[np.ndarray]]:
 
 
 # ---------------------------------------------------------------------------
-# States plus per-mode number moments (T2.8, rule R13)
+# States plus per-mode number moments
 # ---------------------------------------------------------------------------
 
 def _solve_states_and_moments(H, rho0, times, c_ops, number_ops, options=None):

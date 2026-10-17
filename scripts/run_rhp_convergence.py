@@ -1,5 +1,5 @@
-"""RHP under changes of time step, pseudo-inverse cutoff and grid alignment
-(rule R3), and the Stage A divergence check (A8).
+"""RHP under changes of time step, pseudo-inverse cutoff and grid alignment,
+and the Stage A divergence check.
 
 Writes results/rhp_convergence_{finite_T,spin_boson}.json and
 results/stageA_rhp_divergence.json.

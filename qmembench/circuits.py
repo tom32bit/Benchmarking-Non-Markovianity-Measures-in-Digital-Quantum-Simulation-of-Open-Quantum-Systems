@@ -154,7 +154,7 @@ def exact_gad_block(qc: QuantumCircuit, target: int, anc: int, coin: int, gamma:
 def stageA_variant_circuit(init: str, n_steps: int, dt: float, omega: float, kappa: float,
                            n_th: float = 0.0, order: str = "UD", mode_init: str = "0",
                            gad: str = "split") -> QuantumCircuit:
-    """Stage A step variants for the Trotter-order mechanism checks (A1).
+    """Stage A step variants for the Trotter-order mechanism checks.
 
     ``order`` "UD" is the production step (coherent block, then damping);
     "DU" reverses it. ``mode_init`` "1" starts the mode excited. ``gad``

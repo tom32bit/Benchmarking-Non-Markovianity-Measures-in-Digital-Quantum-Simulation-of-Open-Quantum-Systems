@@ -1048,7 +1048,7 @@ def phase5_fock_rule(quick: bool = False, eps: float = 1e-2, c_var: float = 3.0)
 
 
 # ===========================================================================
-# Noise-model parameters and their device equivalents (T2.12)
+# Noise-model parameters and their device equivalents
 # ===========================================================================
 
 def noise_model_mapping(scales=(0.5, 1.0, 2.0),
@@ -1102,7 +1102,7 @@ def noise_model_mapping(scales=(0.5, 1.0, 2.0),
 
 
 # ===========================================================================
-# Zero-noise extrapolation over seeds, with the paper's estimators (T2.12)
+# Zero-noise extrapolation over seeds, with the paper's estimators
 # ===========================================================================
 
 ZNE_LINEAR_WEIGHTS_135 = np.array([13.0 / 12.0, 1.0 / 3.0, -5.0 / 12.0])   # line through folds 1,3,5 at 0
@@ -1215,7 +1215,7 @@ def zne_multiseed(noise_scales=(1.0, 2.0), n_seeds: int = 500, shots: int = 4096
 
 
 # ===========================================================================
-# Finite-T circuit error budget against its matched truncation (T2.6)
+# Finite-T circuit error budget against its matched truncation
 # ===========================================================================
 
 def finiteT_error_budget(n_ths=(0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5),
@@ -1259,7 +1259,7 @@ def finiteT_error_budget(n_ths=(0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5),
 
 
 # ===========================================================================
-# Strong-coupling excess and the Hilbert-space boundary (T2.14, rule R14)
+# Strong-coupling excess and the Hilbert-space boundary
 # ===========================================================================
 
 def _boundary_point(args) -> dict:
@@ -1313,7 +1313,7 @@ def boundary_mechanism_study(gs=(0.3, 0.4, 0.5, 0.7), dims=(2, 3, 4, 5, 6), d_re
                              sampling: float = 0.003125, t_max: float = 10.0,
                              n_workers: int = 1) -> dict:
     """R14: does the n = 2 excess backflow at strong coupling track the
-    population of the highest retained Fock level (B-T2)?"""
+    population of the highest retained Fock level?"""
     n = int(round(t_max / sampling))
     times = np.linspace(0.0, n * sampling, n + 1)
     tasks = [(float(g), int(d), times) for g in gs for d in list(dims) + [d_ref]]
@@ -1342,7 +1342,7 @@ def boundary_mechanism_study(gs=(0.3, 0.4, 0.5, 0.7), dims=(2, 3, 4, 5, 6), d_re
 
 
 # ===========================================================================
-# Revised Fock-dimension rule (T2.8, rule R13)
+# Revised Fock-dimension rule
 # ===========================================================================
 
 FOCK_C_GRID = np.round(np.arange(0.0, 8.0 + 1e-9, 0.25), 2)
@@ -2226,8 +2226,8 @@ def dimer_convergence_and_memory(d_max: int = 8, trotter_dts=(0.05, 0.025, 0.012
 
 def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.0,
                           params=None, record: str | None = None) -> dict:
-    """Fock convergence of the pair-optimised BLP at a fine sampling (B-G3:
-    Fock dimension and time resolution together), with the value at twice
+    """Fock convergence of the pair-optimised BLP at a fine sampling (Fock
+    dimension and time resolution together), with the value at twice
     the sampling for the time check at each d. ``family``: "finite_T"
     (Table 1 points), "spin_boson" (Table 2 points) or "dimer" (Sec. 8);
     ``params`` overrides the family's points and ``record`` the record name."""
@@ -2278,7 +2278,7 @@ def joint_fock_time_check(family: str, dims, sampling: float, t_max: float = 10.
 
 
 # ===========================================================================
-# Pseudomode vs chain at equal gate cost (T2.13, rule R2)
+# Pseudomode vs chain at equal gate cost
 # ===========================================================================
 
 def _pareto_front(points):
@@ -2426,7 +2426,7 @@ def embedding_noise_leg(chain_params: dict, noise_scales=(0.5, 1.0, 2.0), n_seed
 
 
 # ===========================================================================
-# Correlated detuning noise: exact ensemble averages (T2.11, rule R1)
+# Correlated detuning noise: exact ensemble averages
 # ===========================================================================
 
 def correlated_noise_study(sigmas=(0.05, 0.1, 0.2), tau_cs=(0.1, 0.3, 1.0, 3.0, 10.0, 30.0, np.inf),
@@ -2495,7 +2495,7 @@ def correlated_noise_study(sigmas=(0.05, 0.1, 0.2), tau_cs=(0.1, 0.3, 1.0, 3.0, 
 
 
 # ===========================================================================
-# Shot-noise dispersion of the simulator's sampling (found in T2.9)
+# Shot-noise dispersion of the simulator's sampling
 # ===========================================================================
 
 def aer_shot_dispersion_check(n_seeds: int = 30, shots: int = 4096, dt: float = 0.15,
@@ -2553,12 +2553,12 @@ def aer_shot_dispersion_check(n_seeds: int = 30, shots: int = 4096, dt: float = 
 
 
 # ===========================================================================
-# Finite-shot estimator characterisation (T2.9, R11) and null floor (T2.10, R12)
+# Finite-shot estimator characterisation and the Markovian control
 # ===========================================================================
 
 def _noise_model(kind: str, scale: float):
     """The depolarizing model of build_noise_model, or pure thermal relaxation
-    with the FakeKolkataV2 median T1, T2 and gate durations (T2.12)."""
+    with the FakeKolkataV2 median T1, T2 and gate durations."""
     if kind == "depolarizing":
         return build_noise_model(scale=scale)
     if kind == "thermal_relaxation":
@@ -2685,7 +2685,7 @@ def estimator_characterization(n_seeds: int = 1000, shots: int = 4096, n_boot: i
                                grids=(("A", 0.15, 2), ("B", 0.3, 2)),
                                t_max: float = 9.0, rng_seed: int = 20260925,
                                noise_kind: str = "depolarizing") -> dict:
-    """T2.9 (R11) and T2.10 (R12): the finite-shot estimators on the paper's two
+    """The finite-shot estimators on the paper's two
     grids, with counts drawn as Binomial(shots, p) from the exact outcome
     probabilities of the measured circuits; the null-floor decision rules on
     grid A with the Markovian Stage A control."""
@@ -2749,7 +2749,7 @@ def estimator_characterization(n_seeds: int = 1000, shots: int = 4096, n_boot: i
                                    "difference": diff,
                                    "within_3_sigma": bool(abs(diff) <= 3 * np.hypot(sem_rec, mine["sem"]))}
                 row["aer_reproduction"] = checks
-                # T2.10: null floor on grid A, raw estimator, Markovian control
+                # null floor on grid A, raw estimator, Markovian control
                 exc = _exact_measured_probabilities(omega_c, kappa_c, dt, step_list, pair, scale)
                 rc = np.random.default_rng([rng_seed, gi, si, 1])
                 ctrl_a = [_seed_estimators(rc.binomial(shots, exc["p0"]), rc.binomial(shots, exc["p_cal0"]),
@@ -2787,7 +2787,7 @@ def estimator_characterization(n_seeds: int = 1000, shots: int = 4096, n_boot: i
 
 
 # ===========================================================================
-# RHP: convergence in time step, regularisation and grid alignment (T2.7, R3)
+# RHP: convergence in time step, regularisation and grid alignment
 # ===========================================================================
 
 def _rhp_scan(states, index_lists, rconds) -> dict:
@@ -2827,7 +2827,7 @@ def _offset_grids(t_max: float, fine: float, samplings, offsets) -> dict:
 def rhp_convergence_study(family: str, d_ref: int, samplings=(0.1, 0.05, 0.025, 0.0125),
                           rconds=(1e-4, 1e-6, 1e-8, 1e-10), offsets=(0.0, 0.5)) -> dict:
     """The RHP values of the paper's appendix table under changes of time step,
-    pseudo-inverse cutoff and grid alignment (rule R3).
+    pseudo-inverse cutoff and grid alignment.
 
     Sources: QuTiP at d_ref and at n = 2 (the circuit's model), solved once on
     a grid of min(samplings)/2 so that half-step offsets exist; and the
@@ -2888,7 +2888,7 @@ def stageA_rhp_divergence(samplings=(0.1, 0.05, 0.025, 0.0125, 0.00625, 0.003125
                                      0.0015625, 0.00078125),
                           offsets=(0.0, 0.25, 0.5), rconds=(1e-4, 1e-6, 1e-8, 1e-10),
                           t_max: float = 10.0) -> dict:
-    """A8: the Stage A RHP integral diverges in the continuum, so a discrete
+    """The Stage A RHP integral diverges in the continuum, so a discrete
     value is fixed by the step, the grid alignment and the cutoff. Exact
     (closed-form) channel; N_RHP on each grid, with the per-step share of the
     largest term."""
@@ -2911,7 +2911,7 @@ def stageA_rhp_divergence(samplings=(0.1, 0.05, 0.025, 0.0125, 0.00625, 0.003125
 
 
 # ===========================================================================
-# Trotter order and its mechanism (T2.1, rule R10)
+# Trotter order and its mechanism
 # ===========================================================================
 
 def _fit_order(dts, errs) -> dict:
@@ -2927,7 +2927,7 @@ def _fit_order(dts, errs) -> dict:
 
 def trotter_order_study(dts=(0.4, 0.2, 0.1, 0.05, 0.025, 0.0125, 0.00625), t_max: float = 12.0,
                         n_th: float = 0.5, g_stageB: float = 0.4, n_fit: int = 5) -> dict:
-    """Trotter order of the circuits, and the A1 mechanism checks (rule R10).
+    """Trotter order of the circuits, and the checks of its mechanism.
 
     Error at step dt: max over the six inputs and the common times (multiples
     of max(dts)) of the trace distance between circuit and reference; the
@@ -3041,7 +3041,7 @@ def trotter_order_study(dts=(0.4, 0.2, 0.1, 0.05, 0.025, 0.0125, 0.00625), t_max
                      "fit_all": _fit_order(dts, errs),
                      "fit_elementwise_smallest": _fit_order(
                          dts[-n_fit:], [e["elementwise_error"] for e in per_dt][-n_fit:])})
-    # the QuTiP reference against the closed form where both exist (A-M3)
+    # the QuTiP reference against the closed form where both exist
     q = _six_from_ic(_ic_states(qutip_A(0.0), t_fine))
     a = _six_from_ic(_ic_states(analytic_A, t_fine))
     out = {"rows": rows, "dts": dts, "t_max": t_max, "n_th": n_th, "g_stageB": g_stageB,

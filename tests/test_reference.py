@@ -38,7 +38,7 @@ def test_G_regimes():
 
 
 def test_continuum_blp_closed_form_limits():
-    """A2: the Stage A continuum BLP sums the |G| rises exp(-pi k lam/delta);
+    """The Stage A continuum BLP sums the |G| rises exp(-pi k lam/delta);
     for an infinite window it is 1/(exp(pi lam/delta) - 1). Markovian: zero."""
     from qmembench.reference import analytic_blp_continuum
     delta = np.sqrt(2 * 5.0 * 1.0 - 1.0)

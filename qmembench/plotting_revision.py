@@ -221,7 +221,8 @@ def fig_dimer_populations() -> Path:
 
 def fig_phase_diagram_optimized() -> Path:
     """Signed truncation error N(n=2) - N(d_ref) for the optimised pair, and the
-    reference memory, over the (coupling, temperature) plane (rule R7 record).
+    reference memory, over the (coupling, temperature) plane, from the record
+    phase9_truncation_phase_diagram_optimized.
 
     Points with |error| <= 1e-3 are drawn grey (sign not resolved); points where
     the reference changes by >= 1e-3 between d_check and d_ref are dotted. The
