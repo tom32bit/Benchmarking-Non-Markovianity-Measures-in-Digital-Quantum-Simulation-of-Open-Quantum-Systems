@@ -11,6 +11,15 @@ abstract: >-
   and an embedding comparison at equal gate cost.
 type: software
 version: "0.2.0"
+date-released: "2026-10-18"
+doi: "10.5281/zenodo.23449846"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.23449846"
+    description: "Zenodo archive of release v0.2.0"
+  - type: doi
+    value: "10.5281/zenodo.23449845"
+    description: "Zenodo concept DOI (all versions)"
 authors:
   - given-names: "S.M. Yousuf Iqbal"
     family-names: "Tomal"

@@ -1,5 +1,7 @@
 # Benchmarking Non-Markovianity Measures in Digital Quantum Simulation of Open Quantum Systems
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23449846.svg)](https://doi.org/10.5281/zenodo.23449846)
+
 A validated, simulator-based framework for quantifying non-Markovian memory in
 digital quantum simulations of open quantum systems, and for measuring how that
 quantification fails under three unavoidable pressures: state-space truncation,
@@ -129,8 +131,14 @@ convergence in time step and Fock dimension.
 
 ## Citation
 
-If you use this code, please cite the accompanying paper. A `CITATION.cff` file
-is provided.
+If you use this code, please cite the accompanying paper and the archived
+software. Release `v0.2.0`, the version used for the paper, is archived on Zenodo:
+
+- this version: [10.5281/zenodo.23449846](https://doi.org/10.5281/zenodo.23449846)
+- all versions (always resolves to the latest):
+  [10.5281/zenodo.23449845](https://doi.org/10.5281/zenodo.23449845)
+
+A `CITATION.cff` file is provided; GitHub's "Cite this repository" button uses it.
 
 ## License
 
